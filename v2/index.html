@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UK electricity network — interactive schematic</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #1a1a1a;
+    background: #f7f6f3;
+    padding: 2rem 1rem;
+  }
+  .container { max-width: 1080px; margin: 0 auto; }
+  header { margin-bottom: 1rem; }
+  h1 { font-size: 24px; font-weight: 500; margin-bottom: 0.25rem; }
+  .intro { color: #666; font-size: 14px; }
+
+  /* Stats banner */
+  .stats-strip {
+    display: flex; gap: 4px; margin-bottom: 1rem;
+    padding: 8px; background: #ecebe6; border-radius: 8px;
+    overflow-x: auto;
+  }
+  .stat {
+    flex: 1; min-width: 100px; padding: 8px 6px; background: white;
+    border: 1px solid #ddd; border-radius: 6px; text-align: center;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .stat:hover { border-color: #888; }
+  .stat-val { font-size: 18px; font-weight: 600; color: #185FA5; line-height: 1.2; }
+  .stat-label { font-size: 10px; color: #666; margin-top: 2px; line-height: 1.2; }
+
+  /* Mode selector */
+  .mode-strip {
+    display: flex; gap: 4px; margin-bottom: 8px;
+    padding: 4px; background: #e2e1dc; border-radius: 6px;
+  }
+  .mode-btn {
+    padding: 6px 12px; border-radius: 4px; font-size: 12px;
+    background: transparent; border: none; cursor: pointer;
+    color: #666; transition: all 0.15s; font-family: inherit;
+  }
+  .mode-btn:hover { color: #333; }
+  .mode-btn.active { background: white; color: #1a1a1a; font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+  .mode-btn[data-mode="market"].active { background: #FFF8E6; color: #8B6914; }
+  .mode-btn[data-mode="sysop"].active { background: #E8F5E9; color: #2E7D32; }
+
+  /* Tier strip */
+  .ctx-strip {
+    display: flex; align-items: stretch; gap: 4px;
+    padding: 8px; background: #ecebe6; border-radius: 8px; margin-bottom: 1.25rem;
+  }
+  .ctx-node {
+    padding: 8px 8px; border-radius: 6px; font-size: 12px;
+    background: white; border: 1px solid #ddd; flex: 1;
+    text-align: center; line-height: 1.3; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .ctx-node:hover { border-color: #888; }
+  .ctx-node.active {
+    border: 2px solid #185FA5; background: #E6F1FB; color: #0C447C;
+    font-weight: 500; padding: 7px 7px;
+  }
+  .ctx-arrow { color: #999; display: flex; align-items: center; user-select: none; padding: 0 2px; }
+  .ctx-sub { font-size: 11px; color: #666; margin-top: 2px; }
+  .ctx-node.active .ctx-sub { color: #0C447C; }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: 1fr 320px; gap: 1.25rem; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .schematic-col { background: white; border-radius: 8px; padding: 1rem; border: 1px solid #e8e8e8; }
+  .info-col { background: white; border-radius: 8px; padding: 1.25rem; border: 1px solid #e8e8e8; position: sticky; top: 1rem; }
+  .tier-pane { display: none; }
+  .tier-pane.active { display: block; }
+  .hotspot { cursor: pointer; transition: opacity 0.15s; }
+  .hotspot:hover { opacity: 0.6; }
+
+  /* Sidebar */
+  .info-img {
+    width: 100%; aspect-ratio: 4/3; background: #f5f5f5; border-radius: 6px;
+    margin-bottom: 1rem; display: flex; align-items: center; justify-content: center;
+    overflow: hidden; color: #aaa; font-size: 13px;
+  }
+  .info-img img { width: 100%; height: 100%; object-fit: cover; }
+  .info-name { font-weight: 500; font-size: 15px; margin-bottom: 0.5rem; }
+  .info-desc { color: #555; font-size: 13.5px; line-height: 1.55; margin-bottom: 1rem; }
+  .info-link {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+    border: 1px solid #ccc; border-radius: 6px; font-size: 13px;
+    color: #185FA5; text-decoration: none; transition: all 0.15s;
+  }
+  .info-link:hover { background: #f5f5f5; border-color: #888; }
+
+  /* Timeline */
+  .timeline-section {
+    margin-top: 2rem; padding: 1.5rem; background: white;
+    border-radius: 8px; border: 1px solid #e8e8e8;
+  }
+  .timeline-section h2 { font-size: 18px; font-weight: 500; margin-bottom: 1rem; }
+  .timeline {
+    position: relative; padding-left: 32px;
+  }
+  .timeline::before {
+    content: ''; position: absolute; left: 11px; top: 8px; bottom: 8px;
+    width: 2px; background: #ddd;
+  }
+  .tl-item {
+    position: relative; padding: 6px 0 14px 20px; cursor: pointer;
+    transition: background 0.15s; border-radius: 6px; padding-right: 8px;
+  }
+  .tl-item:hover { background: #f7f6f3; }
+  .tl-item::before {
+    content: ''; position: absolute; left: -25px; top: 12px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: white; border: 2px solid #185FA5;
+  }
+  .tl-item.milestone::before { background: #185FA5; }
+  .tl-year { font-weight: 600; font-size: 13px; color: #185FA5; }
+  .tl-text { font-size: 13px; color: #555; }
+
+  /* Regulatory footer */
+  .reg-section {
+    margin-top: 1.5rem; padding: 1.5rem; background: white;
+    border-radius: 8px; border: 1px solid #e8e8e8;
+  }
+  .reg-section h2 { font-size: 18px; font-weight: 500; margin-bottom: 1rem; }
+
+  .footer { text-align: center; margin-top: 1.5rem; font-size: 12px; color: #888; }
+  svg text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #333; }
+  svg .t { font-size: 14px; }
+  svg .ts { font-size: 12px; fill: #666; }
+  svg .th { font-size: 14px; font-weight: 500; }
+
+  /* Market overlay SVG colours */
+  .mkt-box { fill: #FFFBEB; stroke: #B8860B; }
+  .mkt-text { fill: #8B6914; }
+  .mkt-accent { fill: #F5DEB3; stroke: #B8860B; }
+
+  /* SysOp overlay SVG colours */
+  .sysop-box { fill: #E8F5E9; stroke: #388E3C; }
+  .sysop-text { fill: #2E7D32; }
+  .sysop-accent { fill: #C8E6C9; stroke: #388E3C; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>UK electricity network</h1>
+    <p class="intro">From a power station to a socket — six tiers, three layers. Pick a view, then a tier, then click any component.</p>
+  </header>
+
+  <!-- Stats banner -->
+  <div class="stats-strip">
+    <div class="stat" onclick="showDetail('stat_peak')"><div class="stat-val">47 GW</div><div class="stat-label">Peak demand (2024)</div></div>
+    <div class="stat" onclick="showDetail('stat_renewables')"><div class="stat-val">52.5%</div><div class="stat-label">Renewables (2025)</div></div>
+    <div class="stat" onclick="showDetail('stat_interconnectors')"><div class="stat-val">10.3 GW</div><div class="stat-label">Interconnectors</div></div>
+    <div class="stat" onclick="showDetail('stat_queue')"><div class="stat-val">756 GW</div><div class="stat-label">Connection queue</div></div>
+    <div class="stat" onclick="showDetail('stat_constraints')"><div class="stat-val">&pound;1.9bn</div><div class="stat-label">Constraint costs/yr</div></div>
+    <div class="stat" onclick="showDetail('stat_network')"><div class="stat-val">~800k km</div><div class="stat-label">Network length</div></div>
+  </div>
+
+  <!-- Mode selector -->
+  <div class="mode-strip">
+    <button class="mode-btn active" data-mode="physical" onclick="setMode('physical')">Physical Network</button>
+    <button class="mode-btn" data-mode="market" onclick="setMode('market')">Market &amp; Money</button>
+    <button class="mode-btn" data-mode="sysop" onclick="setMode('sysop')">System Operation</button>
+  </div>
+
+  <!-- Tier strip -->
+  <nav class="ctx-strip">
+    <div class="ctx-node" data-tier="gen" onclick="showTier('gen')"><div>Generation</div><div class="ctx-sub">11–25kV</div></div>
+    <span class="ctx-arrow">&rarr;</span>
+    <div class="ctx-node" data-tier="tx" onclick="showTier('tx')"><div>Transmission</div><div class="ctx-sub">400 / 275kV</div></div>
+    <span class="ctx-arrow">&rarr;</span>
+    <div class="ctx-node active" data-tier="gsp" onclick="showTier('gsp')"><div>GSP</div><div class="ctx-sub">boundary</div></div>
+    <span class="ctx-arrow">&rarr;</span>
+    <div class="ctx-node" data-tier="primary" onclick="showTier('primary')"><div>Primary</div><div class="ctx-sub">132 &rarr; 11kV</div></div>
+    <span class="ctx-arrow">&rarr;</span>
+    <div class="ctx-node" data-tier="secondary" onclick="showTier('secondary')"><div>Secondary</div><div class="ctx-sub">11kV / 400V</div></div>
+    <span class="ctx-arrow">&rarr;</span>
+    <div class="ctx-node" data-tier="cust" onclick="showTier('cust')"><div>Customer</div><div class="ctx-sub">400V / 230V</div></div>
+  </nav>
+
+  <main class="layout">
+    <section class="schematic-col">
+
+      <!-- ======================== PHYSICAL TIER PANES ======================== -->
+
+      <div class="tier-pane" id="pane-gen-physical">
+        <svg width="100%" viewBox="0 0 680 380" role="img">
+          <defs><marker id="arr-g1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5"/></marker></defs>
+          <text class="ts" x="30" y="30">Thermal station (canonical)</text>
+          <g class="hotspot" onclick="showDetail('gen_fuel')"><rect x="50" y="145" width="90" height="50" rx="6" fill="white" stroke="#BA7517"/><text class="th" x="95" y="168" text-anchor="middle">Gas / coal</text><text class="ts" x="95" y="184" text-anchor="middle">or biomass</text></g>
+          <line x1="140" y1="170" x2="180" y2="170" stroke="#666" stroke-width="2" marker-end="url(#arr-g1)"/>
+          <g class="hotspot" onclick="showDetail('gen_turbine')"><circle cx="215" cy="170" r="28" fill="white" stroke="#BA7517" stroke-width="1.5"/><path d="M215 148 L221 166 L238 170 L221 174 L215 192 L209 174 L192 170 L209 166 Z" fill="#EF9F27" opacity="0.35"/><text class="ts" x="215" y="215" text-anchor="middle">Turbine</text></g>
+          <line x1="243" y1="170" x2="283" y2="170" stroke="#666" stroke-width="2"/>
+          <text class="ts" x="263" y="162" text-anchor="middle" fill="#999">shaft</text>
+          <g class="hotspot" onclick="showDetail('gen_alternator')"><circle cx="310" cy="170" r="26" fill="white" stroke="#BA7517" stroke-width="1.5"/><text class="th" x="310" y="175" text-anchor="middle">G</text><text class="ts" x="310" y="213" text-anchor="middle">Generator</text><text class="ts" x="310" y="227" text-anchor="middle" fill="#999">11–25kV</text></g>
+          <line x1="336" y1="170" x2="378" y2="170" stroke="#BA7517" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('gen_cb')"><rect x="378" y="160" width="20" height="20" fill="white" stroke="#BA7517" stroke-width="1.5"/></g>
+          <line x1="398" y1="170" x2="436" y2="170" stroke="#BA7517" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('gen_gsu')"><circle cx="464" cy="170" r="18" fill="white" stroke="#BA7517" stroke-width="1.5"/><circle cx="464" cy="195" r="18" fill="white" stroke="#D85A30" stroke-width="1.5"/><text class="ts" x="464" y="233" text-anchor="middle">GSU transformer</text></g>
+          <line x1="464" y1="213" x2="464" y2="290" stroke="#D85A30" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('gen_export')"><path d="M 450 305 L 464 285 L 478 305 M 444 300 L 484 300 M 452 293 L 476 293" stroke="#666" stroke-width="1" fill="none"/><text class="ts" x="464" y="328" text-anchor="middle">To transmission</text><text class="ts" x="464" y="344" text-anchor="middle" fill="#999">400kV OHL</text></g>
+          <line x1="310" y1="196" x2="310" y2="260" stroke="#666" stroke-width="1"/>
+          <g class="hotspot" onclick="showDetail('gen_station')"><rect x="255" y="260" width="110" height="40" rx="6" fill="#f5f5f5" stroke="#ddd"/><text class="th" x="310" y="278" text-anchor="middle">Station aux</text><text class="ts" x="310" y="293" text-anchor="middle" fill="#999">pumps, fans, lighting</text></g>
+          <text class="ts" x="620" y="50" text-anchor="middle" fill="#999">Alternatives</text>
+          <g class="hotspot" onclick="showDetail('gen_wind')"><rect x="550" y="70" width="120" height="44" rx="6" fill="white" stroke="#1D9E75"/><text class="th" x="610" y="90" text-anchor="middle">Wind</text><text class="ts" x="610" y="106" text-anchor="middle" fill="#999">onshore / offshore</text></g>
+          <g class="hotspot" onclick="showDetail('gen_solar')"><rect x="550" y="125" width="120" height="44" rx="6" fill="white" stroke="#1D9E75"/><text class="th" x="610" y="145" text-anchor="middle">Solar PV</text><text class="ts" x="610" y="161" text-anchor="middle" fill="#999">utility farms</text></g>
+          <g class="hotspot" onclick="showDetail('gen_nuclear')"><rect x="550" y="180" width="120" height="44" rx="6" fill="white" stroke="#1D9E75"/><text class="th" x="610" y="200" text-anchor="middle">Nuclear</text><text class="ts" x="610" y="216" text-anchor="middle" fill="#999">baseload</text></g>
+          <g class="hotspot" onclick="showDetail('gen_hydro')"><rect x="550" y="235" width="120" height="44" rx="6" fill="white" stroke="#1D9E75"/><text class="th" x="610" y="255" text-anchor="middle">Hydro / BESS</text><text class="ts" x="610" y="271" text-anchor="middle" fill="#999">flex, pumped, storage</text></g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-tx-physical">
+        <svg width="100%" viewBox="0 0 680 400" role="img">
+          <defs><marker id="arr-tx1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5"/></marker></defs>
+          <text class="ts" x="30" y="30">Transmission network (400 / 275kV)</text>
+          <path d="M 30 150 L 70 150" stroke="#D85A30" stroke-width="3" stroke-linecap="round"/>
+          <text class="ts" x="50" y="135" fill="#999">&#8598; From gens</text>
+          <g class="hotspot" onclick="showDetail('tx_substation')"><rect x="70" y="120" width="120" height="60" rx="6" fill="#FAECE7" stroke="#993C1D"/><text class="th" x="130" y="146" text-anchor="middle" fill="#993C1D">Grid substation</text><text class="ts" x="130" y="164" text-anchor="middle" fill="#712B13">400kV node</text></g>
+          <g class="hotspot" onclick="showDetail('tx_ohl')">
+            <path d="M 230 162 L 240 138 L 250 162 M 226 155 L 254 155 M 233 148 L 247 148" stroke="#666" fill="none"/>
+            <path d="M 320 162 L 330 138 L 340 162 M 316 155 L 344 155 M 323 148 L 337 148" stroke="#666" fill="none"/>
+            <line x1="190" y1="150" x2="400" y2="150" stroke="#D85A30" stroke-width="2"/>
+            <text class="ts" x="285" y="115" text-anchor="middle" fill="#999">400kV overhead line</text>
+          </g>
+          <g class="hotspot" onclick="showDetail('tx_substation')"><rect x="400" y="120" width="120" height="60" rx="6" fill="#FAECE7" stroke="#993C1D"/><text class="th" x="460" y="146" text-anchor="middle" fill="#993C1D">Grid substation</text><text class="ts" x="460" y="164" text-anchor="middle" fill="#712B13">interconnecting hub</text></g>
+          <line x1="520" y1="150" x2="555" y2="150" stroke="#D85A30" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('tx_hvdc')"><rect x="555" y="120" width="110" height="60" rx="6" fill="#FAECE7" stroke="#993C1D"/><text class="th" x="610" y="146" text-anchor="middle" fill="#993C1D">HVDC converter</text><text class="ts" x="610" y="164" text-anchor="middle" fill="#712B13">interconnector</text></g>
+          <line x1="460" y1="180" x2="460" y2="220" stroke="#D85A30" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('tx_svc')"><rect x="400" y="220" width="120" height="50" rx="6" fill="#f5f5f5" stroke="#ddd"/><text class="th" x="460" y="242" text-anchor="middle">SVC / STATCOM</text><text class="ts" x="460" y="258" text-anchor="middle" fill="#999">reactive compensation</text></g>
+          <g class="hotspot" onclick="showDetail('tx_neso')"><rect x="50" y="220" width="130" height="50" rx="6" fill="#f5f5f5" stroke="#ddd"/><text class="th" x="115" y="242" text-anchor="middle">NESO control</text><text class="ts" x="115" y="258" text-anchor="middle" fill="#999">national dispatch, BMRS</text></g>
+          <line x1="130" y1="180" x2="130" y2="320" stroke="#D85A30" stroke-width="2"/>
+          <line x1="285" y1="150" x2="285" y2="320" stroke="#D85A30" stroke-width="2"/>
+          <line x1="460" y1="270" x2="460" y2="320" stroke="#D85A30" stroke-width="2"/>
+          <text class="ts" x="130" y="340" text-anchor="middle">&#8595; To GSP</text>
+          <text class="ts" x="285" y="340" text-anchor="middle">&#8595; To GSP</text>
+          <text class="ts" x="460" y="340" text-anchor="middle">&#8595; To GSP</text>
+          <text class="ts" x="340" y="378" text-anchor="middle" fill="#999">TOs: NGET (E&amp;W), SPT (southern Scotland), SSEN-T (northern Scotland)</text>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-gsp-physical">
+        <svg width="100%" viewBox="0 0 680 530" role="img">
+          <text class="ts" x="30" y="40">Transmission side</text>
+          <text class="ts" x="30" y="420">Distribution side</text>
+          <g class="hotspot" onclick="showDetail('gsp_incoming')"><path d="M 170 52 L 180 40 L 190 52 M 166 48 L 194 48 M 174 44 L 186 44" stroke="#666" fill="none"/><line x1="180" y1="52" x2="180" y2="95" stroke="#D85A30" stroke-width="2"/><text class="ts" x="200" y="70">400kV in</text></g>
+          <g class="hotspot" onclick="showDetail('gsp_disconnector')"><line x1="180" y1="95" x2="180" y2="118" stroke="#D85A30" stroke-width="2"/><line x1="180" y1="100" x2="194" y2="110" stroke="#D85A30" stroke-width="2"/></g>
+          <g class="hotspot" onclick="showDetail('gsp_cb')"><line x1="180" y1="118" x2="180" y2="180" stroke="#D85A30" stroke-width="2"/><rect x="172" y="134" width="16" height="16" fill="white" stroke="#D85A30" stroke-width="1.5"/></g>
+          <g class="hotspot" onclick="showDetail('gsp_incoming')"><path d="M 370 52 L 380 40 L 390 52 M 366 48 L 394 48 M 374 44 L 386 44" stroke="#666" fill="none"/><line x1="380" y1="52" x2="380" y2="95" stroke="#D85A30" stroke-width="2"/><text class="ts" x="400" y="70">400kV in</text></g>
+          <g class="hotspot" onclick="showDetail('gsp_disconnector')"><line x1="380" y1="95" x2="380" y2="118" stroke="#D85A30" stroke-width="2"/><line x1="380" y1="100" x2="394" y2="110" stroke="#D85A30" stroke-width="2"/></g>
+          <g class="hotspot" onclick="showDetail('gsp_cb')"><line x1="380" y1="118" x2="380" y2="180" stroke="#D85A30" stroke-width="2"/><rect x="372" y="134" width="16" height="16" fill="white" stroke="#D85A30" stroke-width="1.5"/></g>
+          <g class="hotspot" onclick="showDetail('gsp_hvbus')"><line x1="80" y1="180" x2="480" y2="180" stroke="#D85A30" stroke-width="4" stroke-linecap="round"/></g>
+          <text class="ts" x="490" y="184">400kV busbar</text>
+          <line x1="200" y1="180" x2="200" y2="210" stroke="#D85A30" stroke-width="2"/>
+          <line x1="360" y1="180" x2="360" y2="210" stroke="#D85A30" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('gsp_sgt')"><circle cx="200" cy="230" r="20" fill="white" stroke="#D85A30" stroke-width="1.5"/><circle cx="200" cy="260" r="20" fill="white" stroke="#378ADD" stroke-width="1.5"/><text class="ts" x="200" y="300" text-anchor="middle">SGT 1</text></g>
+          <g class="hotspot" onclick="showDetail('gsp_sgt')"><circle cx="360" cy="230" r="20" fill="white" stroke="#D85A30" stroke-width="1.5"/><circle cx="360" cy="260" r="20" fill="white" stroke="#378ADD" stroke-width="1.5"/><text class="ts" x="360" y="300" text-anchor="middle">SGT 2</text></g>
+          <line x1="200" y1="280" x2="200" y2="380" stroke="#378ADD" stroke-width="2"/>
+          <line x1="360" y1="280" x2="360" y2="380" stroke="#378ADD" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('gsp_boundary')"><line x1="30" y1="355" x2="650" y2="355" stroke="#aaa" stroke-width="0.8" stroke-dasharray="5 4"/><text class="ts" x="470" y="350">TO &#8597; DNO boundary</text><circle cx="200" cy="330" r="9" fill="white" stroke="#666"/><text x="200" y="334" text-anchor="middle" font-size="11" fill="#666">M</text><circle cx="360" cy="330" r="9" fill="white" stroke="#666"/><text x="360" y="334" text-anchor="middle" font-size="11" fill="#666">M</text></g>
+          <g class="hotspot" onclick="showDetail('gsp_lvbus')"><line x1="80" y1="380" x2="480" y2="380" stroke="#378ADD" stroke-width="4" stroke-linecap="round"/></g>
+          <text class="ts" x="490" y="384">132kV busbar</text>
+          <g class="hotspot" onclick="showDetail('gsp_feeder')"><line x1="120" y1="380" x2="120" y2="408" stroke="#378ADD" stroke-width="2"/><rect x="112" y="408" width="16" height="16" fill="white" stroke="#378ADD" stroke-width="1.5"/><line x1="120" y1="424" x2="120" y2="470" stroke="#378ADD" stroke-width="2"/><text class="ts" x="120" y="488" text-anchor="middle">To BSP A</text></g>
+          <g class="hotspot" onclick="showDetail('gsp_feeder')"><line x1="260" y1="380" x2="260" y2="408" stroke="#378ADD" stroke-width="2"/><rect x="252" y="408" width="16" height="16" fill="white" stroke="#378ADD" stroke-width="1.5"/><line x1="260" y1="424" x2="260" y2="470" stroke="#378ADD" stroke-width="2"/><text class="ts" x="260" y="488" text-anchor="middle">To BSP B</text></g>
+          <g class="hotspot" onclick="showDetail('gsp_feeder')"><line x1="440" y1="380" x2="440" y2="408" stroke="#378ADD" stroke-width="2"/><rect x="432" y="408" width="16" height="16" fill="white" stroke="#378ADD" stroke-width="1.5"/><line x1="440" y1="424" x2="440" y2="470" stroke="#378ADD" stroke-width="2"/><text class="ts" x="440" y="488" text-anchor="middle">To BSP C</text></g>
+          <g class="hotspot" onclick="showDetail('gsp_control')"><rect x="530" y="95" width="120" height="54" rx="6" fill="#f0efea" stroke="#bbb"/><text class="th" x="590" y="119" text-anchor="middle">Control building</text><text class="ts" x="590" y="137" text-anchor="middle">Protection, SCADA</text></g>
+          <g class="hotspot" onclick="showDetail('gsp_reactive')"><rect x="530" y="225" width="120" height="54" rx="6" fill="#f0efea" stroke="#bbb"/><text class="th" x="590" y="249" text-anchor="middle">Reactive comp.</text><text class="ts" x="590" y="267" text-anchor="middle">Reactors, capacitors</text></g>
+          <g class="hotspot" onclick="showDetail('gsp_earth')"><rect x="530" y="430" width="120" height="54" rx="6" fill="#f0efea" stroke="#bbb"/><text class="th" x="590" y="454" text-anchor="middle">Earth grid</text><text class="ts" x="590" y="472" text-anchor="middle">Fault dissipation</text></g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-primary-physical">
+        <svg width="100%" viewBox="0 0 680 600" role="img">
+          <text class="ts" x="30" y="30">Primary distribution — BSP (132/33kV) and Primary substation (33/11kV)</text>
+          <g class="hotspot" onclick="showDetail('primary_132in')"><path d="M 150 52 L 160 40 L 170 52 M 146 48 L 174 48 M 154 44 L 166 44" stroke="#666" fill="none"/><line x1="160" y1="52" x2="160" y2="90" stroke="#378ADD" stroke-width="2"/><text class="ts" x="100" y="70">132kV from GSP</text></g>
+          <g class="hotspot" onclick="showDetail('primary_132in')"><path d="M 230 52 L 240 40 L 250 52 M 226 48 L 254 48 M 234 44 L 246 44" stroke="#666" fill="none"/><line x1="240" y1="52" x2="240" y2="90" stroke="#378ADD" stroke-width="2"/></g>
+          <g class="hotspot" onclick="showDetail('primary_bsp')"><rect x="80" y="90" width="240" height="110" rx="8" fill="#f0f7fc" stroke="#378ADD" stroke-width="0.8" stroke-dasharray="4 3"/><text class="th" x="200" y="110" text-anchor="middle" fill="#0C447C">Bulk Supply Point (BSP)</text><text class="ts" x="200" y="124" text-anchor="middle" fill="#185FA5">132 / 33kV</text></g>
+          <line x1="110" y1="140" x2="290" y2="140" stroke="#378ADD" stroke-width="3"/>
+          <line x1="160" y1="90" x2="160" y2="140" stroke="#378ADD" stroke-width="2"/>
+          <line x1="240" y1="90" x2="240" y2="140" stroke="#378ADD" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('primary_bsp_trafo')"><circle cx="150" cy="158" r="10" fill="white" stroke="#378ADD" stroke-width="1.5"/><circle cx="150" cy="175" r="10" fill="white" stroke="#5DCAA5" stroke-width="1.5"/></g>
+          <g class="hotspot" onclick="showDetail('primary_bsp_trafo')"><circle cx="250" cy="158" r="10" fill="white" stroke="#378ADD" stroke-width="1.5"/><circle cx="250" cy="175" r="10" fill="white" stroke="#5DCAA5" stroke-width="1.5"/></g>
+          <line x1="110" y1="190" x2="290" y2="190" stroke="#5DCAA5" stroke-width="3"/>
+          <line x1="150" y1="185" x2="150" y2="190" stroke="#5DCAA5" stroke-width="2"/>
+          <line x1="250" y1="185" x2="250" y2="190" stroke="#5DCAA5" stroke-width="2"/>
+          <text class="ts" x="330" y="143" fill="#185FA5">132kV</text>
+          <text class="ts" x="330" y="193" fill="#0F6E56">33kV</text>
+          <g class="hotspot" onclick="showDetail('primary_33feeder')"><line x1="200" y1="200" x2="200" y2="240" stroke="#5DCAA5" stroke-width="2"/><text class="ts" x="220" y="225">33kV feeders to primary substations</text></g>
+          <line x1="200" y1="240" x2="200" y2="265" stroke="#5DCAA5" stroke-width="2" stroke-dasharray="2 2"/>
+          <text class="ts" x="200" y="254" text-anchor="middle" fill="#999" font-size="11">(often several km)</text>
+          <text class="th" x="340" y="290" text-anchor="middle">Primary substation (33 / 11kV)</text>
+          <g class="hotspot" onclick="showDetail('primary_33in')"><line x1="200" y1="310" x2="200" y2="340" stroke="#5DCAA5" stroke-width="2"/><text class="ts" x="165" y="325" text-anchor="end">33kV in</text></g>
+          <g class="hotspot" onclick="showDetail('primary_33in')"><line x1="480" y1="310" x2="480" y2="340" stroke="#5DCAA5" stroke-width="2"/><text class="ts" x="515" y="325">33kV in</text></g>
+          <g class="hotspot" onclick="showDetail('primary_disconnector')"><line x1="200" y1="340" x2="214" y2="350" stroke="#5DCAA5" stroke-width="2"/></g>
+          <g class="hotspot" onclick="showDetail('primary_cb')"><line x1="200" y1="350" x2="200" y2="385" stroke="#5DCAA5" stroke-width="2"/><rect x="192" y="358" width="16" height="16" fill="white" stroke="#5DCAA5" stroke-width="1.5"/></g>
+          <g class="hotspot" onclick="showDetail('primary_disconnector')"><line x1="480" y1="340" x2="494" y2="350" stroke="#5DCAA5" stroke-width="2"/></g>
+          <g class="hotspot" onclick="showDetail('primary_cb')"><line x1="480" y1="350" x2="480" y2="385" stroke="#5DCAA5" stroke-width="2"/><rect x="472" y="358" width="16" height="16" fill="white" stroke="#5DCAA5" stroke-width="1.5"/></g>
+          <g class="hotspot" onclick="showDetail('primary_33bus')"><line x1="140" y1="385" x2="540" y2="385" stroke="#5DCAA5" stroke-width="4" stroke-linecap="round"/></g>
+          <text class="ts" x="550" y="389">33kV bus</text>
+          <line x1="240" y1="385" x2="240" y2="410" stroke="#5DCAA5" stroke-width="2"/>
+          <line x1="440" y1="385" x2="440" y2="410" stroke="#5DCAA5" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('primary_trafo')"><circle cx="240" cy="430" r="20" fill="white" stroke="#5DCAA5" stroke-width="1.5"/><circle cx="240" cy="460" r="20" fill="white" stroke="#378ADD" stroke-width="1.5"/><text class="ts" x="240" y="498" text-anchor="middle">T1 (33/11kV)</text></g>
+          <g class="hotspot" onclick="showDetail('primary_oltc')"><line x1="262" y1="445" x2="278" y2="445" stroke="#888" stroke-width="0.8"/><rect x="278" y="438" width="32" height="14" rx="2" fill="#fff" stroke="#888" stroke-width="0.8"/><text x="294" y="449" text-anchor="middle" font-size="10" fill="#555">OLTC</text></g>
+          <g class="hotspot" onclick="showDetail('primary_trafo')"><circle cx="440" cy="430" r="20" fill="white" stroke="#5DCAA5" stroke-width="1.5"/><circle cx="440" cy="460" r="20" fill="white" stroke="#378ADD" stroke-width="1.5"/><text class="ts" x="440" y="498" text-anchor="middle">T2 (33/11kV)</text></g>
+          <line x1="240" y1="480" x2="240" y2="515" stroke="#378ADD" stroke-width="2"/>
+          <line x1="440" y1="480" x2="440" y2="515" stroke="#378ADD" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('primary_11bus')"><line x1="140" y1="515" x2="540" y2="515" stroke="#378ADD" stroke-width="4" stroke-linecap="round"/></g>
+          <text class="ts" x="550" y="519">11kV bus</text>
+          <g class="hotspot" onclick="showDetail('primary_11feeder')"><line x1="180" y1="515" x2="180" y2="540" stroke="#378ADD" stroke-width="2"/><rect x="172" y="540" width="16" height="16" fill="white" stroke="#378ADD" stroke-width="1.5"/><line x1="180" y1="556" x2="180" y2="580" stroke="#378ADD" stroke-width="2"/><text class="ts" x="180" y="595" text-anchor="middle">To secondary</text></g>
+          <g class="hotspot" onclick="showDetail('primary_11feeder')"><line x1="340" y1="515" x2="340" y2="540" stroke="#378ADD" stroke-width="2"/><rect x="332" y="540" width="16" height="16" fill="white" stroke="#378ADD" stroke-width="1.5"/><line x1="340" y1="556" x2="340" y2="580" stroke="#378ADD" stroke-width="2"/><text class="ts" x="340" y="595" text-anchor="middle">To secondary</text></g>
+          <g class="hotspot" onclick="showDetail('primary_11feeder')"><line x1="500" y1="515" x2="500" y2="540" stroke="#378ADD" stroke-width="2"/><rect x="492" y="540" width="16" height="16" fill="white" stroke="#378ADD" stroke-width="1.5"/><line x1="500" y1="556" x2="500" y2="580" stroke="#378ADD" stroke-width="2"/><text class="ts" x="500" y="595" text-anchor="middle">To secondary</text></g>
+          <g class="hotspot" onclick="showDetail('primary_protection')"><rect x="580" y="380" width="90" height="50" rx="6" fill="#f0efea" stroke="#bbb"/><text class="th" x="625" y="402" text-anchor="middle">Protection</text><text class="ts" x="625" y="418" text-anchor="middle" fill="#999">SCADA, AVC</text></g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-secondary-physical">
+        <svg width="100%" viewBox="0 0 680 480" role="img">
+          <text class="ts" x="30" y="30">Secondary distribution — 11kV / 400V distribution substation</text>
+          <g class="hotspot" onclick="showDetail('sec_11in')"><line x1="80" y1="80" x2="240" y2="80" stroke="#378ADD" stroke-width="2.5"/><text class="ts" x="80" y="70">11kV from primary (ring)</text></g>
+          <g class="hotspot" onclick="showDetail('sec_11in')"><line x1="340" y1="80" x2="500" y2="80" stroke="#378ADD" stroke-width="2.5"/></g>
+          <g class="hotspot" onclick="showDetail('sec_rmu')"><rect x="240" y="60" width="100" height="50" rx="4" fill="white" stroke="#378ADD" stroke-width="1.5"/><text class="th" x="290" y="82" text-anchor="middle" fill="#0C447C">RMU</text><text class="ts" x="290" y="98" text-anchor="middle" fill="#185FA5">ring main unit</text></g>
+          <line x1="290" y1="110" x2="290" y2="145" stroke="#378ADD" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('sec_hvfuse')"><rect x="275" y="145" width="30" height="24" fill="white" stroke="#378ADD" stroke-width="1.5"/><line x1="282" y1="150" x2="282" y2="164" stroke="#378ADD" stroke-width="2"/><line x1="290" y1="150" x2="290" y2="164" stroke="#378ADD" stroke-width="2"/><line x1="298" y1="150" x2="298" y2="164" stroke="#378ADD" stroke-width="2"/><text class="ts" x="340" y="162">HV fuse / switch</text></g>
+          <line x1="290" y1="169" x2="290" y2="200" stroke="#378ADD" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('sec_trafo')"><circle cx="290" cy="220" r="22" fill="white" stroke="#378ADD" stroke-width="1.5"/><circle cx="290" cy="253" r="22" fill="white" stroke="#73726c" stroke-width="1.5"/><text class="th" x="290" y="295" text-anchor="middle">Distribution transformer</text><text class="ts" x="290" y="310" text-anchor="middle" fill="#999">11kV / 400V, 500–1000 kVA</text></g>
+          <line x1="290" y1="275" x2="290" y2="330" stroke="#73726c" stroke-width="2"/>
+          <g class="hotspot" onclick="showDetail('sec_lvbus')"><line x1="140" y1="330" x2="440" y2="330" stroke="#73726c" stroke-width="4" stroke-linecap="round"/><text class="ts" x="450" y="334">400V LV bus</text></g>
+          <g class="hotspot" onclick="showDetail('sec_lvfuse')"><rect x="172" y="335" width="16" height="20" fill="white" stroke="#73726c"/><rect x="272" y="335" width="16" height="20" fill="white" stroke="#73726c"/><rect x="372" y="335" width="16" height="20" fill="white" stroke="#73726c"/></g>
+          <g class="hotspot" onclick="showDetail('sec_lvfeeder')"><line x1="180" y1="355" x2="180" y2="395" stroke="#73726c" stroke-width="2"/><line x1="280" y1="355" x2="280" y2="395" stroke="#73726c" stroke-width="2"/><line x1="380" y1="355" x2="380" y2="395" stroke="#73726c" stroke-width="2"/><text class="ts" x="280" y="410" text-anchor="middle" fill="#999">LV feeders (underground / overhead)</text></g>
+          <g class="hotspot" onclick="showDetail('sec_pillar')"><rect x="230" y="425" width="100" height="30" rx="4" fill="#e8e8e5" stroke="#73726c"/><text class="th" x="280" y="444" text-anchor="middle">LV pillar</text></g>
+          <line x1="180" y1="395" x2="180" y2="440" stroke="#73726c" stroke-width="2"/>
+          <line x1="180" y1="440" x2="230" y2="440" stroke="#73726c" stroke-width="2"/>
+          <line x1="330" y1="440" x2="380" y2="440" stroke="#73726c" stroke-width="2"/>
+          <line x1="380" y1="395" x2="380" y2="440" stroke="#73726c" stroke-width="2"/>
+          <line x1="280" y1="455" x2="280" y2="470" stroke="#73726c" stroke-width="2"/>
+          <text class="ts" x="280" y="478" text-anchor="middle">&#8595; To customer service cables</text>
+          <text class="ts" x="610" y="60" text-anchor="middle" fill="#999">Variants</text>
+          <g class="hotspot" onclick="showDetail('sec_pole')"><rect x="550" y="80" width="120" height="60" rx="6" fill="white" stroke="#1D9E75"/><text class="th" x="610" y="104" text-anchor="middle">Pole-mounted</text><text class="ts" x="610" y="120" text-anchor="middle" fill="#999">rural, 25–315 kVA</text></g>
+          <g class="hotspot" onclick="showDetail('sec_package')"><rect x="550" y="160" width="120" height="60" rx="6" fill="white" stroke="#1D9E75"/><text class="th" x="610" y="184" text-anchor="middle">Package / kiosk</text><text class="ts" x="610" y="200" text-anchor="middle" fill="#999">prefab retrofit</text></g>
+          <g class="hotspot" onclick="showDetail('sec_ground')"><rect x="550" y="240" width="120" height="60" rx="6" fill="white" stroke="#1D9E75"/><text class="th" x="610" y="264" text-anchor="middle">Ground-mount</text><text class="ts" x="610" y="280" text-anchor="middle" fill="#999">brick kiosk, urban</text></g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-cust-physical">
+        <svg width="100%" viewBox="0 0 680 420" role="img">
+          <text class="ts" x="30" y="30">Customer premises (domestic)</text>
+          <path d="M 130 130 L 340 55 L 550 130 L 550 340 L 130 340 Z" fill="#f7f6f3" stroke="#c8c6c0" stroke-width="0.8"/>
+          <line x1="130" y1="130" x2="550" y2="130" stroke="#c8c6c0" stroke-width="0.8"/>
+          <g class="hotspot" onclick="showDetail('cust_solar')"><path d="M 165 125 L 320 70 L 320 88 L 165 143 Z" fill="#9FE1CB" fill-opacity="0.4" stroke="#0F6E56"/><text class="ts" x="245" y="108" text-anchor="middle" fill="#0F6E56">Solar PV</text></g>
+          <g class="hotspot" onclick="showDetail('cust_service')"><line x1="40" y1="260" x2="135" y2="260" stroke="#666" stroke-width="2"/><text class="ts" x="50" y="250" fill="#999">Service cable</text><text class="ts" x="50" y="278" fill="#999">230 / 400V</text></g>
+          <g class="hotspot" onclick="showDetail('cust_cutout')"><rect x="135" y="248" width="44" height="28" fill="white" stroke="#1a1a1a"/><text x="157" y="267" text-anchor="middle" font-size="11">Cutout</text></g>
+          <line x1="179" y1="260" x2="210" y2="260" stroke="#1a1a1a" stroke-width="1.5"/>
+          <g class="hotspot" onclick="showDetail('cust_meter')"><rect x="210" y="240" width="56" height="44" rx="4" fill="white" stroke="#1a1a1a"/><rect x="218" y="248" width="40" height="14" fill="#f5f5f5" stroke="#ccc"/><text x="238" y="259" text-anchor="middle" font-size="10" font-family="monospace">12345</text><text class="ts" x="238" y="302" text-anchor="middle">Smart meter</text></g>
+          <line x1="266" y1="260" x2="300" y2="260" stroke="#1a1a1a" stroke-width="1.5"/>
+          <g class="hotspot" onclick="showDetail('cust_cu')"><rect x="300" y="230" width="80" height="64" rx="4" fill="white" stroke="#1a1a1a"/><rect x="310" y="242" width="60" height="6" fill="#378ADD" fill-opacity="0.4"/><rect x="310" y="252" width="60" height="6" fill="#378ADD" fill-opacity="0.4"/><rect x="310" y="262" width="60" height="6" fill="#378ADD" fill-opacity="0.4"/><rect x="310" y="272" width="60" height="6" fill="#378ADD" fill-opacity="0.4"/><text class="ts" x="340" y="312" text-anchor="middle">Consumer unit</text></g>
+          <g class="hotspot" onclick="showDetail('cust_circuits')"><line x1="380" y1="245" x2="438" y2="180" stroke="#378ADD" stroke-width="1.5"/><rect x="440" y="162" width="80" height="34" rx="4" fill="white" stroke="#378ADD"/><text class="ts" x="480" y="183" text-anchor="middle">Lighting</text></g>
+          <g class="hotspot" onclick="showDetail('cust_circuits')"><line x1="380" y1="262" x2="438" y2="262" stroke="#378ADD" stroke-width="1.5"/><rect x="440" y="244" width="80" height="34" rx="4" fill="white" stroke="#378ADD"/><text class="ts" x="480" y="265" text-anchor="middle">Sockets ring</text></g>
+          <g class="hotspot" onclick="showDetail('cust_circuits')"><line x1="380" y1="280" x2="438" y2="320" stroke="#378ADD" stroke-width="1.5"/><rect x="440" y="304" width="80" height="34" rx="4" fill="white" stroke="#378ADD"/><text class="ts" x="480" y="325" text-anchor="middle">Cooker radial</text></g>
+          <line x1="245" y1="140" x2="305" y2="230" stroke="#0F6E56" stroke-width="1.5" stroke-dasharray="3 2"/>
+          <text class="ts" x="278" y="190" fill="#0F6E56" font-size="11">solar DC</text>
+          <g class="hotspot" onclick="showDetail('cust_ev')"><line x1="380" y1="286" x2="588" y2="370" stroke="#378ADD" stroke-width="1.5"/><rect x="560" y="360" width="80" height="44" rx="4" fill="white" stroke="#378ADD"/><text class="th" x="600" y="380" text-anchor="middle">EV charger</text><text class="ts" x="600" y="395" text-anchor="middle" fill="#999">7kW wallbox</text></g>
+          <g class="hotspot" onclick="showDetail('cust_earth')"><line x1="340" y1="294" x2="340" y2="370" stroke="#666" stroke-width="1" stroke-dasharray="2 2"/><line x1="325" y1="370" x2="355" y2="370" stroke="#666" stroke-width="1.2"/><line x1="329" y1="374" x2="351" y2="374" stroke="#666"/><line x1="333" y1="378" x2="347" y2="378" stroke="#666"/><text class="ts" x="340" y="398" text-anchor="middle" fill="#999" font-size="11">Main earth</text></g>
+        </svg>
+      </div>
+
+      <!-- ======================== MARKET & MONEY PANES ======================== -->
+
+      <div class="tier-pane" id="pane-gen-market">
+        <svg width="100%" viewBox="0 0 680 420" role="img">
+          <text class="ts" x="30" y="25" fill="#8B6914">Market &amp; Money — Generation</text>
+
+          <!-- Merit order stack -->
+          <g class="hotspot" onclick="showDetail('mkt_gen_merit')">
+            <text class="th" x="30" y="60" fill="#8B6914">Merit order stack</text>
+            <text class="ts" x="30" y="76" fill="#999">Cheapest dispatched first</text>
+            <rect x="30" y="90" width="180" height="28" rx="3" fill="#C8E6C9" stroke="#388E3C"/><text class="ts" x="120" y="108" text-anchor="middle">Wind / Solar (&#163;0/MWh marginal)</text>
+            <rect x="30" y="122" width="180" height="28" rx="3" fill="#DCEDC8" stroke="#689F38"/><text class="ts" x="120" y="140" text-anchor="middle">Nuclear (&#163;10/MWh)</text>
+            <rect x="30" y="154" width="180" height="28" rx="3" fill="#FFF9C4" stroke="#FBC02D"/><text class="ts" x="120" y="172" text-anchor="middle">Biomass (&#163;40/MWh)</text>
+            <rect x="30" y="186" width="180" height="28" rx="3" fill="#FFE0B2" stroke="#F57C00"/><text class="ts" x="120" y="204" text-anchor="middle">CCGT gas (&#163;50–80/MWh)</text>
+            <rect x="30" y="218" width="180" height="28" rx="3" fill="#FFCCBC" stroke="#E64A19"/><text class="ts" x="120" y="236" text-anchor="middle">OCGT peaker (&#163;80–150/MWh)</text>
+            <line x1="220" y1="100" x2="220" y2="246" stroke="#999" stroke-width="1" stroke-dasharray="3 2"/>
+            <text class="ts" x="228" y="176" fill="#999">&#8592; clearing price set by last unit dispatched</text>
+          </g>
+
+          <!-- CfD -->
+          <g class="hotspot" onclick="showDetail('mkt_gen_cfd')">
+            <rect x="380" y="50" width="270" height="80" rx="6" class="mkt-box"/>
+            <text class="th" x="515" y="75" text-anchor="middle" class="mkt-text">Contracts for Difference</text>
+            <text class="ts" x="515" y="93" text-anchor="middle" fill="#999">Strike price vs reference price</text>
+            <text class="ts" x="515" y="110" text-anchor="middle" fill="#999">If market &lt; strike: LCCC pays generator</text>
+            <text class="ts" x="515" y="122" text-anchor="middle" fill="#999">If market &gt; strike: generator pays back</text>
+          </g>
+
+          <!-- Capacity Market -->
+          <g class="hotspot" onclick="showDetail('mkt_gen_capacity')">
+            <rect x="380" y="150" width="270" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="515" y="175" text-anchor="middle" class="mkt-text">Capacity Market</text>
+            <text class="ts" x="515" y="193" text-anchor="middle" fill="#999">T-4 auction (4 years ahead)</text>
+            <text class="ts" x="515" y="207" text-anchor="middle" fill="#999">T-1 auction (1 year ahead)</text>
+          </g>
+
+          <!-- Revenue stacking -->
+          <g class="hotspot" onclick="showDetail('mkt_gen_revenue')">
+            <rect x="380" y="240" width="270" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="515" y="265" text-anchor="middle" class="mkt-text">Revenue stacking</text>
+            <text class="ts" x="515" y="283" text-anchor="middle" fill="#999">Wholesale + CfD/CM + Ancillary + ROCs</text>
+            <text class="ts" x="515" y="297" text-anchor="middle" fill="#999">BESS: BM + DC + wholesale arbitrage</text>
+          </g>
+
+          <!-- Unbundled model -->
+          <g class="hotspot" onclick="showDetail('mkt_gen_unbundled')">
+            <rect x="30" y="280" width="300" height="60" rx="6" class="mkt-box"/>
+            <text class="th" x="180" y="305" text-anchor="middle" class="mkt-text">The unbundled model</text>
+            <text class="ts" x="180" y="323" text-anchor="middle" fill="#999">Generator &#8800; Network &#8800; Supplier (since 1990)</text>
+          </g>
+
+          <!-- Wholesale market -->
+          <g class="hotspot" onclick="showDetail('mkt_gen_wholesale')">
+            <rect x="30" y="355" width="620" height="50" rx="6" class="mkt-box"/>
+            <text class="th" x="340" y="378" text-anchor="middle" class="mkt-text">Wholesale electricity market: day-ahead &#8594; intraday &#8594; balancing</text>
+            <text class="ts" x="340" y="395" text-anchor="middle" fill="#999">EPEX Spot, N2EX, bilateral OTC, and the Balancing Mechanism</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-tx-market">
+        <svg width="100%" viewBox="0 0 680 440" role="img">
+          <text class="ts" x="30" y="25" fill="#8B6914">Market &amp; Money — Transmission</text>
+
+          <!-- TNUoS -->
+          <g class="hotspot" onclick="showDetail('mkt_tx_tnuos')">
+            <rect x="30" y="45" width="290" height="90" rx="6" class="mkt-box"/>
+            <text class="th" x="175" y="70" text-anchor="middle" class="mkt-text">TNUoS charges</text>
+            <text class="ts" x="175" y="88" text-anchor="middle" fill="#999">Transmission Network Use of System</text>
+            <text class="ts" x="175" y="104" text-anchor="middle" fill="#999">27 charging zones across GB</text>
+            <text class="ts" x="175" y="120" text-anchor="middle" fill="#999">Generators pay; demand pays; ~&#163;3.5bn/yr</text>
+          </g>
+
+          <!-- B6 Boundary -->
+          <g class="hotspot" onclick="showDetail('mkt_tx_b6')">
+            <rect x="350" y="45" width="300" height="120" rx="6" fill="#FFF3E0" stroke="#E65100"/>
+            <text class="th" x="500" y="70" text-anchor="middle" fill="#BF360C">B6 boundary bottleneck</text>
+            <!-- Simplified GB outline -->
+            <line x1="400" y1="80" x2="600" y2="80" stroke="#E65100" stroke-width="2" stroke-dasharray="6 3"/>
+            <text class="ts" x="500" y="75" text-anchor="middle" fill="#E65100">Scotland &#8596; England</text>
+            <text class="ts" x="500" y="100" text-anchor="middle" fill="#999">Transfer limit: ~6 GW</text>
+            <text class="ts" x="500" y="116" text-anchor="middle" fill="#999">Constraint costs: &#163;1.9bn (2024/25)</text>
+            <text class="ts" x="500" y="132" text-anchor="middle" fill="#BF360C">Wind farms paid &#163;350m to switch off</text>
+            <text class="ts" x="500" y="148" text-anchor="middle" fill="#999">Eastern Green Links planned: +4 GW</text>
+          </g>
+
+          <!-- BSC Settlement -->
+          <g class="hotspot" onclick="showDetail('mkt_tx_bsc')">
+            <rect x="30" y="160" width="290" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="175" y="185" text-anchor="middle" class="mkt-text">BSC settlement</text>
+            <text class="ts" x="175" y="203" text-anchor="middle" fill="#999">Balancing and Settlement Code</text>
+            <text class="ts" x="175" y="217" text-anchor="middle" fill="#999">Managed by Elexon; half-hourly periods</text>
+          </g>
+
+          <!-- Balancing Mechanism -->
+          <g class="hotspot" onclick="showDetail('mkt_tx_bm')">
+            <rect x="30" y="255" width="620" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="340" y="280" text-anchor="middle" class="mkt-text">Balancing Mechanism</text>
+            <text class="ts" x="340" y="298" text-anchor="middle" fill="#999">NESO accepts bids (reduce output) and offers (increase output) to balance in real time</text>
+            <text class="ts" x="340" y="312" text-anchor="middle" fill="#999">~&#163;2.7bn total balancing cost (2024/25); 71% is transmission constraints</text>
+          </g>
+
+          <!-- Interconnector trading -->
+          <g class="hotspot" onclick="showDetail('mkt_tx_interconn')">
+            <rect x="30" y="350" width="620" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="340" y="375" text-anchor="middle" class="mkt-text">Interconnector trading</text>
+            <text class="ts" x="340" y="393" text-anchor="middle" fill="#999">10.3 GW across 10 links; implicit day-ahead market coupling via SDAC</text>
+            <text class="ts" x="340" y="407" text-anchor="middle" fill="#999">Revenue from price differentials; cap &amp; floor regulation by Ofgem</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-gsp-market">
+        <svg width="100%" viewBox="0 0 680 360" role="img">
+          <text class="ts" x="30" y="25" fill="#8B6914">Market &amp; Money — Grid Supply Point</text>
+
+          <g class="hotspot" onclick="showDetail('mkt_gsp_groups')">
+            <rect x="30" y="45" width="290" height="90" rx="6" class="mkt-box"/>
+            <text class="th" x="175" y="70" text-anchor="middle" class="mkt-text">14 GSP Groups</text>
+            <text class="ts" x="175" y="88" text-anchor="middle" fill="#999">Each group = a settlement area</text>
+            <text class="ts" x="175" y="104" text-anchor="middle" fill="#999">e.g. SEEB (South East), EMEB (East Midlands)</text>
+            <text class="ts" x="175" y="120" text-anchor="middle" fill="#999">Supplier volumes allocated per GSP Group</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_gsp_metering')">
+            <rect x="350" y="45" width="300" height="90" rx="6" class="mkt-box"/>
+            <text class="th" x="500" y="70" text-anchor="middle" class="mkt-text">Settlement metering</text>
+            <text class="ts" x="500" y="88" text-anchor="middle" fill="#999">Class 1/2 meters at the TO/DNO boundary</text>
+            <text class="ts" x="500" y="104" text-anchor="middle" fill="#999">Active + reactive power, half-hourly</text>
+            <text class="ts" x="500" y="120" text-anchor="middle" fill="#999">Drives wholesale market settlement</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_gsp_allocation')">
+            <rect x="30" y="160" width="620" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="340" y="185" text-anchor="middle" class="mkt-text">Supplier volume allocation</text>
+            <text class="ts" x="340" y="203" text-anchor="middle" fill="#999">Total GSP Group demand is split among suppliers based on their customers' meter readings</text>
+            <text class="ts" x="340" y="217" text-anchor="middle" fill="#999">Profiling for non-half-hourly meters; actual HH data for smart meters</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_gsp_losses')">
+            <rect x="30" y="255" width="290" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="175" y="280" text-anchor="middle" class="mkt-text">Transmission losses</text>
+            <text class="ts" x="175" y="298" text-anchor="middle" fill="#999">~1.7% of energy transmitted</text>
+            <text class="ts" x="175" y="312" text-anchor="middle" fill="#999">Allocated via Transmission Loss Factors</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_gsp_duos')">
+            <rect x="350" y="255" width="300" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="500" y="280" text-anchor="middle" class="mkt-text">TO &#8594; DNO handover</text>
+            <text class="ts" x="500" y="298" text-anchor="middle" fill="#999">TNUoS stops; DUoS starts</text>
+            <text class="ts" x="500" y="312" text-anchor="middle" fill="#999">Different charging methodologies</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-primary-market">
+        <svg width="100%" viewBox="0 0 680 360" role="img">
+          <text class="ts" x="30" y="25" fill="#8B6914">Market &amp; Money — Primary Distribution</text>
+
+          <g class="hotspot" onclick="showDetail('mkt_pri_duos')">
+            <rect x="30" y="45" width="290" height="100" rx="6" class="mkt-box"/>
+            <text class="th" x="175" y="70" text-anchor="middle" class="mkt-text">DUoS charges</text>
+            <text class="ts" x="175" y="88" text-anchor="middle" fill="#999">Distribution Use of System</text>
+            <rect x="50" y="100" width="60" height="20" rx="3" fill="#FFCDD2"/><text class="ts" x="80" y="114" text-anchor="middle">Red</text>
+            <rect x="120" y="100" width="60" height="20" rx="3" fill="#FFE0B2"/><text class="ts" x="150" y="114" text-anchor="middle">Amber</text>
+            <rect x="190" y="100" width="60" height="20" rx="3" fill="#C8E6C9"/><text class="ts" x="220" y="114" text-anchor="middle">Green</text>
+            <text class="ts" x="175" y="138" text-anchor="middle" fill="#999">Time-of-use bands; &#163;/kVA/day</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_pri_riio')">
+            <rect x="350" y="45" width="300" height="100" rx="6" class="mkt-box"/>
+            <text class="th" x="500" y="70" text-anchor="middle" class="mkt-text">RIIO-ED2 price control</text>
+            <text class="ts" x="500" y="88" text-anchor="middle" fill="#999">Revenue = Incentives + Innovation + Outputs</text>
+            <text class="ts" x="500" y="104" text-anchor="middle" fill="#999">2023–2028, set by Ofgem</text>
+            <text class="ts" x="500" y="120" text-anchor="middle" fill="#999">DNO allowed revenue: ~&#163;25bn over ED2</text>
+            <text class="ts" x="500" y="136" text-anchor="middle" fill="#999">Outputs: reliability, environment, connections</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_pri_connection')">
+            <rect x="30" y="170" width="620" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="340" y="195" text-anchor="middle" class="mkt-text">Connection charges</text>
+            <text class="ts" x="340" y="213" text-anchor="middle" fill="#999">"Shallowish" charging: customer pays for dedicated assets + proportion of shared reinforcement</text>
+            <text class="ts" x="340" y="227" text-anchor="middle" fill="#999">Large industrial at 33kV: &#163;100k–&#163;5M+ depending on reinforcement needed</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_pri_industrial')">
+            <rect x="30" y="265" width="290" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="175" y="290" text-anchor="middle" class="mkt-text">Large industrial customers</text>
+            <text class="ts" x="175" y="308" text-anchor="middle" fill="#999">Data centres, steelworks, hospitals</text>
+            <text class="ts" x="175" y="322" text-anchor="middle" fill="#999">Connect at 33kV or 132kV for lower charges</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_pri_dno_map')">
+            <rect x="350" y="265" width="300" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="500" y="290" text-anchor="middle" class="mkt-text">6 DNO groups, 14 licence areas</text>
+            <text class="ts" x="500" y="308" text-anchor="middle" fill="#999">UKPN, ENW, NPG, SPEN, SSEN, NGED</text>
+            <text class="ts" x="500" y="322" text-anchor="middle" fill="#999">Each sets own DUoS tariffs</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-secondary-market">
+        <svg width="100%" viewBox="0 0 680 300" role="img">
+          <text class="ts" x="30" y="25" fill="#8B6914">Market &amp; Money — Secondary Distribution</text>
+
+          <g class="hotspot" onclick="showDetail('mkt_sec_passthrough')">
+            <rect x="30" y="45" width="290" height="80" rx="6" class="mkt-box"/>
+            <text class="th" x="175" y="70" text-anchor="middle" class="mkt-text">DUoS pass-through</text>
+            <text class="ts" x="175" y="88" text-anchor="middle" fill="#999">Suppliers pay DUoS to DNOs</text>
+            <text class="ts" x="175" y="104" text-anchor="middle" fill="#999">Then pass cost through to customer bills</text>
+            <text class="ts" x="175" y="118" text-anchor="middle" fill="#999">~25% of a typical domestic bill</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_sec_incentives')">
+            <rect x="350" y="45" width="300" height="80" rx="6" class="mkt-box"/>
+            <text class="th" x="500" y="70" text-anchor="middle" class="mkt-text">DNO incentive mechanisms</text>
+            <text class="ts" x="500" y="88" text-anchor="middle" fill="#999">IIS: Interruptions Incentive Scheme</text>
+            <text class="ts" x="500" y="104" text-anchor="middle" fill="#999">Penalty for outages &gt; target; reward below</text>
+            <text class="ts" x="500" y="118" text-anchor="middle" fill="#999">ICE: Incentive on Connections Engagement</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_sec_losses')">
+            <rect x="30" y="150" width="290" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="175" y="175" text-anchor="middle" class="mkt-text">Distribution losses</text>
+            <text class="ts" x="175" y="193" text-anchor="middle" fill="#999">~5–7% of energy distributed</text>
+            <text class="ts" x="175" y="207" text-anchor="middle" fill="#999">Mostly in LV cables and transformers</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_sec_flexibility')">
+            <rect x="350" y="150" width="300" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="500" y="175" text-anchor="middle" class="mkt-text">Flexibility markets</text>
+            <text class="ts" x="500" y="193" text-anchor="middle" fill="#999">DNOs procure flexibility from DERs</text>
+            <text class="ts" x="500" y="207" text-anchor="middle" fill="#999">Alternative to network reinforcement</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('mkt_sec_wayleaves')">
+            <rect x="30" y="245" width="620" height="45" rx="6" class="mkt-box"/>
+            <text class="th" x="340" y="270" text-anchor="middle" class="mkt-text">Wayleaves and easements</text>
+            <text class="ts" x="340" y="284" text-anchor="middle" fill="#999">DNOs pay landowners for cable/overhead line routes across private land</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-cust-market">
+        <svg width="100%" viewBox="0 0 680 440" role="img">
+          <text class="ts" x="30" y="25" fill="#8B6914">Market &amp; Money — Customer</text>
+
+          <!-- Bill breakdown -->
+          <g class="hotspot" onclick="showDetail('mkt_cust_bill')">
+            <text class="th" x="30" y="60" fill="#8B6914">Typical domestic bill breakdown</text>
+            <rect x="30" y="75" width="248" height="24" rx="3" fill="#BBDEFB" stroke="#1565C0"/><text class="ts" x="154" y="91" text-anchor="middle">Wholesale energy (~40%)</text>
+            <rect x="30" y="103" width="155" height="24" rx="3" fill="#FFE0B2" stroke="#EF6C00"/><text class="ts" x="108" y="119" text-anchor="middle">Network costs (~25%)</text>
+            <rect x="30" y="131" width="124" height="24" rx="3" fill="#E1BEE7" stroke="#7B1FA2"/><text class="ts" x="92" y="147" text-anchor="middle">Policy costs (~20%)</text>
+            <rect x="30" y="159" width="50" height="24" rx="3" fill="#C8E6C9" stroke="#388E3C"/><text class="ts" x="55" y="175" text-anchor="middle">Supplier (~8%)</text>
+            <rect x="84" y="159" width="30" height="24" rx="3" fill="#F5F5F5" stroke="#616161"/><text class="ts" x="99" y="175" text-anchor="middle">VAT 5%</text>
+          </g>
+
+          <!-- Energy price cap -->
+          <g class="hotspot" onclick="showDetail('mkt_cust_cap')">
+            <rect x="350" y="50" width="300" height="80" rx="6" class="mkt-box"/>
+            <text class="th" x="500" y="75" text-anchor="middle" class="mkt-text">Energy price cap</text>
+            <text class="ts" x="500" y="93" text-anchor="middle" fill="#999">Set quarterly by Ofgem</text>
+            <text class="ts" x="500" y="109" text-anchor="middle" fill="#999">Caps unit rate + standing charge</text>
+            <text class="ts" x="500" y="123" text-anchor="middle" fill="#999">Based on wholesale cost forecasts</text>
+          </g>
+
+          <!-- Tariff types -->
+          <g class="hotspot" onclick="showDetail('mkt_cust_tariffs')">
+            <rect x="350" y="150" width="300" height="80" rx="6" class="mkt-box"/>
+            <text class="th" x="500" y="175" text-anchor="middle" class="mkt-text">Tariff types</text>
+            <text class="ts" x="500" y="193" text-anchor="middle" fill="#999">Fixed / Variable / Time-of-Use / Agile</text>
+            <text class="ts" x="500" y="207" text-anchor="middle" fill="#999">Export tariff: Smart Export Guarantee</text>
+            <text class="ts" x="500" y="221" text-anchor="middle" fill="#999">EV-specific tariffs (cheap overnight)</text>
+          </g>
+
+          <!-- Supplier switching -->
+          <g class="hotspot" onclick="showDetail('mkt_cust_switching')">
+            <rect x="30" y="210" width="290" height="70" rx="6" class="mkt-box"/>
+            <text class="th" x="175" y="235" text-anchor="middle" class="mkt-text">Supplier competition</text>
+            <text class="ts" x="175" y="253" text-anchor="middle" fill="#999">~20 active domestic suppliers in GB</text>
+            <text class="ts" x="175" y="267" text-anchor="middle" fill="#999">Switch in 5 working days since 2019</text>
+          </g>
+
+          <!-- Connections process -->
+          <g class="hotspot" onclick="showDetail('mkt_cust_connections')">
+            <text class="th" x="30" y="310" fill="#8B6914">Grid connection process</text>
+            <rect x="30" y="320" width="80" height="30" rx="4" fill="#FFF9C4" stroke="#F9A825"/><text class="ts" x="70" y="339" text-anchor="middle">Apply</text>
+            <line x1="110" y1="335" x2="125" y2="335" stroke="#999" stroke-width="1.5" marker-end="url(#arr-g1)"/>
+            <rect x="130" y="320" width="80" height="30" rx="4" fill="#FFF9C4" stroke="#F9A825"/><text class="ts" x="170" y="339" text-anchor="middle">Offer</text>
+            <line x1="210" y1="335" x2="225" y2="335" stroke="#999" stroke-width="1.5" marker-end="url(#arr-g1)"/>
+            <rect x="230" y="320" width="80" height="30" rx="4" fill="#FFF9C4" stroke="#F9A825"/><text class="ts" x="270" y="339" text-anchor="middle">Agree</text>
+            <line x1="310" y1="335" x2="325" y2="335" stroke="#999" stroke-width="1.5" marker-end="url(#arr-g1)"/>
+            <rect x="330" y="320" width="80" height="30" rx="4" fill="#FFF9C4" stroke="#F9A825"/><text class="ts" x="370" y="339" text-anchor="middle">Design</text>
+            <line x1="410" y1="335" x2="425" y2="335" stroke="#999" stroke-width="1.5" marker-end="url(#arr-g1)"/>
+            <rect x="430" y="320" width="80" height="30" rx="4" fill="#FFF9C4" stroke="#F9A825"/><text class="ts" x="470" y="339" text-anchor="middle">Works</text>
+            <line x1="510" y1="335" x2="525" y2="335" stroke="#999" stroke-width="1.5" marker-end="url(#arr-g1)"/>
+            <rect x="530" y="320" width="100" height="30" rx="4" fill="#C8E6C9" stroke="#388E3C"/><text class="ts" x="580" y="339" text-anchor="middle">Energised</text>
+            <text class="ts" x="340" y="370" text-anchor="middle" fill="#BF360C">Queue: 756 GW waiting; typical wait: 10–15 years for transmission</text>
+          </g>
+
+          <!-- HH Settlement -->
+          <g class="hotspot" onclick="showDetail('mkt_cust_hh')">
+            <rect x="30" y="390" width="620" height="40" rx="6" class="mkt-box"/>
+            <text class="th" x="340" y="413" text-anchor="middle" class="mkt-text">Half-hourly settlement (MHHS): every smart meter is now a settlement meter (2025)</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- ======================== SYSTEM OPERATION PANES ======================== -->
+
+      <div class="tier-pane" id="pane-gen-sysop">
+        <svg width="100%" viewBox="0 0 680 400" role="img">
+          <text class="ts" x="30" y="25" fill="#2E7D32">System Operation — Generation</text>
+
+          <g class="hotspot" onclick="showDetail('sysop_gen_frequency')">
+            <rect x="30" y="45" width="290" height="110" rx="6" class="sysop-box"/>
+            <text class="th" x="175" y="70" text-anchor="middle" class="sysop-text">Frequency response</text>
+            <text class="ts" x="175" y="90" text-anchor="middle" fill="#999">Target: 50.00 Hz &#177;0.2 Hz normal</text>
+            <text class="ts" x="175" y="106" text-anchor="middle" fill="#999">Primary: 0–10s (governor/droop)</text>
+            <text class="ts" x="175" y="122" text-anchor="middle" fill="#999">Secondary: 30s–30min (AGC)</text>
+            <text class="ts" x="175" y="138" text-anchor="middle" fill="#999">High frequency: reduce output &gt;50.4Hz</text>
+            <text class="ts" x="175" y="148" text-anchor="middle" fill="#BF360C">Below 47.5 Hz = automatic load shed</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_gen_inertia')">
+            <rect x="350" y="45" width="300" height="80" rx="6" class="sysop-box"/>
+            <text class="th" x="500" y="70" text-anchor="middle" class="sysop-text">Inertia</text>
+            <text class="ts" x="500" y="88" text-anchor="middle" fill="#999">Spinning mass resists frequency change</text>
+            <text class="ts" x="500" y="104" text-anchor="middle" fill="#999">Wind/solar provide zero natural inertia</text>
+            <text class="ts" x="500" y="118" text-anchor="middle" fill="#999">Grid-forming inverters + syncon as fix</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_gen_blackstart')">
+            <rect x="350" y="145" width="300" height="70" rx="6" class="sysop-box"/>
+            <text class="th" x="500" y="170" text-anchor="middle" class="sysop-text">Black start</text>
+            <text class="ts" x="500" y="188" text-anchor="middle" fill="#999">Restart grid from total blackout</text>
+            <text class="ts" x="500" y="202" text-anchor="middle" fill="#999">~12 contracted stations (hydro, OCGT, BESS)</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_gen_reactive')">
+            <rect x="30" y="180" width="290" height="70" rx="6" class="sysop-box"/>
+            <text class="th" x="175" y="205" text-anchor="middle" class="sysop-text">Reactive power obligation</text>
+            <text class="ts" x="175" y="223" text-anchor="middle" fill="#999">Grid Code requires 0.85 lead to 0.95 lag</text>
+            <text class="ts" x="175" y="237" text-anchor="middle" fill="#999">NESO pays for enhanced reactive via ORPS</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_gen_dynamic')">
+            <rect x="30" y="275" width="620" height="50" rx="6" class="sysop-box"/>
+            <text class="th" x="340" y="298" text-anchor="middle" class="sysop-text">Dynamic Containment / Regulation / Moderation</text>
+            <text class="ts" x="340" y="314" text-anchor="middle" fill="#999">Post-fault frequency response services procured day-ahead; BESS dominant provider</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_gen_ancillary')">
+            <rect x="30" y="345" width="620" height="45" rx="6" class="sysop-box"/>
+            <text class="th" x="340" y="370" text-anchor="middle" class="sysop-text">Ancillary services: frequency + reserve + voltage + black start &#8776; &#163;1.5bn/yr total procurement</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-tx-sysop">
+        <svg width="100%" viewBox="0 0 680 430" role="img">
+          <text class="ts" x="30" y="25" fill="#2E7D32">System Operation — Transmission</text>
+
+          <g class="hotspot" onclick="showDetail('sysop_tx_control')">
+            <rect x="30" y="45" width="290" height="100" rx="6" class="sysop-box"/>
+            <text class="th" x="175" y="70" text-anchor="middle" class="sysop-text">NESO control room</text>
+            <text class="ts" x="175" y="88" text-anchor="middle" fill="#999">Two centres: Wokingham + Warwick</text>
+            <text class="ts" x="175" y="104" text-anchor="middle" fill="#999">Real-time demand/frequency monitoring</text>
+            <text class="ts" x="175" y="120" text-anchor="middle" fill="#999">Coordinate with 3 TOs + 6 DNOs</text>
+            <text class="ts" x="175" y="136" text-anchor="middle" fill="#999">~200 control room engineers 24/7</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_tx_forecast')">
+            <rect x="350" y="45" width="300" height="100" rx="6" class="sysop-box"/>
+            <text class="th" x="500" y="70" text-anchor="middle" class="sysop-text">Demand forecasting</text>
+            <text class="ts" x="500" y="88" text-anchor="middle" fill="#999">Week ahead: schedule outages</text>
+            <text class="ts" x="500" y="104" text-anchor="middle" fill="#999">Day ahead: generation scheduling</text>
+            <text class="ts" x="500" y="120" text-anchor="middle" fill="#999">Within-day: BM actions</text>
+            <text class="ts" x="500" y="136" text-anchor="middle" fill="#999">Real-time: second-by-second balance</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_tx_bm')">
+            <rect x="30" y="170" width="620" height="70" rx="6" class="sysop-box"/>
+            <text class="th" x="340" y="195" text-anchor="middle" class="sysop-text">Balancing Mechanism operation</text>
+            <text class="ts" x="340" y="213" text-anchor="middle" fill="#999">Gate closure: 1 hour before delivery &#8594; NESO accepts bids/offers to balance residual</text>
+            <text class="ts" x="340" y="227" text-anchor="middle" fill="#999">BOAs (Bid-Offer Acceptances) dispatched in merit order; system price set by marginal action</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_tx_warnings')">
+            <rect x="30" y="265" width="290" height="70" rx="6" class="sysop-box"/>
+            <text class="th" x="175" y="290" text-anchor="middle" class="sysop-text">System warnings</text>
+            <text class="ts" x="175" y="308" text-anchor="middle" fill="#999">EMN: Electricity Margin Notice</text>
+            <text class="ts" x="175" y="322" text-anchor="middle" fill="#999">Issued when margin &lt; 500 MW (danger)</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_tx_outages')">
+            <rect x="350" y="265" width="300" height="70" rx="6" class="sysop-box"/>
+            <text class="th" x="500" y="290" text-anchor="middle" class="sysop-text">Outage planning</text>
+            <text class="ts" x="500" y="308" text-anchor="middle" fill="#999">NESO coordinates TO maintenance windows</text>
+            <text class="ts" x="500" y="322" text-anchor="middle" fill="#999">Summer: planned transmission outages</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_tx_n1')">
+            <rect x="30" y="360" width="620" height="55" rx="6" class="sysop-box"/>
+            <text class="th" x="340" y="385" text-anchor="middle" class="sysop-text">N-1 security standard: system must survive loss of any single circuit or generator</text>
+            <text class="ts" x="340" y="403" text-anchor="middle" fill="#999">SQSS (Security and Quality of Supply Standard) governs design and real-time operation</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-gsp-sysop">
+        <svg width="100%" viewBox="0 0 680 320" role="img">
+          <text class="ts" x="30" y="25" fill="#2E7D32">System Operation — Grid Supply Point</text>
+
+          <g class="hotspot" onclick="showDetail('sysop_gsp_intertrip')">
+            <rect x="30" y="45" width="290" height="80" rx="6" class="sysop-box"/>
+            <text class="th" x="175" y="70" text-anchor="middle" class="sysop-text">Intertrip schemes</text>
+            <text class="ts" x="175" y="88" text-anchor="middle" fill="#999">Automatic generator trip on circuit loss</text>
+            <text class="ts" x="175" y="104" text-anchor="middle" fill="#999">Prevents overloading post-fault</text>
+            <text class="ts" x="175" y="118" text-anchor="middle" fill="#999">Common on B6 boundary circuits</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_gsp_constraint')">
+            <rect x="350" y="45" width="300" height="80" rx="6" class="sysop-box"/>
+            <text class="th" x="500" y="70" text-anchor="middle" class="sysop-text">Constraint management</text>
+            <text class="ts" x="500" y="88" text-anchor="middle" fill="#999">When flow exceeds thermal rating:</text>
+            <text class="ts" x="500" y="104" text-anchor="middle" fill="#999">NESO pays gen to turn down (bid)</text>
+            <text class="ts" x="500" y="118" text-anchor="middle" fill="#999">+ pays gen elsewhere to turn up (offer)</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_gsp_opmetering')">
+            <rect x="30" y="150" width="290" height="70" rx="6" class="sysop-box"/>
+            <text class="th" x="175" y="175" text-anchor="middle" class="sysop-text">Operational metering</text>
+            <text class="ts" x="175" y="193" text-anchor="middle" fill="#999">Real-time SCADA readings (4s update)</text>
+            <text class="ts" x="175" y="207" text-anchor="middle" fill="#999">vs settlement meters (HH, Class 1/2)</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_gsp_protection')">
+            <rect x="350" y="150" width="300" height="70" rx="6" class="sysop-box"/>
+            <text class="th" x="500" y="175" text-anchor="middle" class="sysop-text">Protection coordination</text>
+            <text class="ts" x="500" y="193" text-anchor="middle" fill="#999">TO and DNO relays must discriminate</text>
+            <text class="ts" x="500" y="207" text-anchor="middle" fill="#999">Fault clears in 80ms without cascade</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_gsp_voltage')">
+            <rect x="30" y="245" width="620" height="55" rx="6" class="sysop-box"/>
+            <text class="th" x="340" y="270" text-anchor="middle" class="sysop-text">Voltage control at the boundary</text>
+            <text class="ts" x="340" y="288" text-anchor="middle" fill="#999">SGT tap changers + reactive comp hold 132kV within &#177;6% of nominal for the DNO</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-primary-sysop">
+        <svg width="100%" viewBox="0 0 680 340" role="img">
+          <text class="ts" x="30" y="25" fill="#2E7D32">System Operation — Primary Distribution</text>
+
+          <g class="hotspot" onclick="showDetail('sysop_pri_avc')">
+            <rect x="30" y="45" width="290" height="90" rx="6" class="sysop-box"/>
+            <text class="th" x="175" y="70" text-anchor="middle" class="sysop-text">Automatic Voltage Control</text>
+            <text class="ts" x="175" y="88" text-anchor="middle" fill="#999">OLTC driven by AVC relay</text>
+            <text class="ts" x="175" y="104" text-anchor="middle" fill="#999">Targets 11kV busbar voltage setpoint</text>
+            <text class="ts" x="175" y="120" text-anchor="middle" fill="#999">Line drop compensation for remote loads</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_pri_faultlevel')">
+            <rect x="350" y="45" width="300" height="90" rx="6" class="sysop-box"/>
+            <text class="th" x="500" y="70" text-anchor="middle" class="sysop-text">Fault level management</text>
+            <text class="ts" x="500" y="88" text-anchor="middle" fill="#999">Switchgear has a max fault rating</text>
+            <text class="ts" x="500" y="104" text-anchor="middle" fill="#999">More DER connections &#8594; higher fault levels</text>
+            <text class="ts" x="500" y="120" text-anchor="middle" fill="#999">Fault level monitoring now at some primaries</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_pri_der')">
+            <rect x="30" y="160" width="620" height="70" rx="6" class="sysop-box"/>
+            <text class="th" x="340" y="185" text-anchor="middle" class="sysop-text">DER visibility challenge</text>
+            <text class="ts" x="340" y="203" text-anchor="middle" fill="#999">DNOs historically had no visibility of embedded generation (solar, BESS, wind below 1MW)</text>
+            <text class="ts" x="340" y="217" text-anchor="middle" fill="#999">Smart meter data + LV monitoring now providing first real-time picture of net demand</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_pri_anm')">
+            <rect x="30" y="255" width="620" height="60" rx="6" class="sysop-box"/>
+            <text class="th" x="340" y="278" text-anchor="middle" class="sysop-text">Active Network Management (ANM)</text>
+            <text class="ts" x="340" y="296" text-anchor="middle" fill="#999">Real-time curtailment of DER when network approaches limits; allows more connections without reinforcement</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-secondary-sysop">
+        <svg width="100%" viewBox="0 0 680 320" role="img">
+          <text class="ts" x="30" y="25" fill="#2E7D32">System Operation — Secondary Distribution</text>
+
+          <g class="hotspot" onclick="showDetail('sysop_sec_lvmon')">
+            <rect x="30" y="45" width="290" height="80" rx="6" class="sysop-box"/>
+            <text class="th" x="175" y="70" text-anchor="middle" class="sysop-text">LV monitoring</text>
+            <text class="ts" x="175" y="88" text-anchor="middle" fill="#999">Smart meter data aggregated per feeder</text>
+            <text class="ts" x="175" y="104" text-anchor="middle" fill="#999">Identifies overloaded transformers</text>
+            <text class="ts" x="175" y="118" text-anchor="middle" fill="#999">Voltage excursion detection</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_sec_flex')">
+            <rect x="350" y="45" width="300" height="80" rx="6" class="sysop-box"/>
+            <text class="th" x="500" y="70" text-anchor="middle" class="sysop-text">Flexible connections</text>
+            <text class="ts" x="500" y="88" text-anchor="middle" fill="#999">Faster connection with curtailment clause</text>
+            <text class="ts" x="500" y="104" text-anchor="middle" fill="#999">DER agrees to reduce output at peak</text>
+            <text class="ts" x="500" y="118" text-anchor="middle" fill="#999">Avoids years of reinforcement wait</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_sec_automation')">
+            <rect x="30" y="150" width="290" height="70" rx="6" class="sysop-box"/>
+            <text class="th" x="175" y="175" text-anchor="middle" class="sysop-text">LV automation</text>
+            <text class="ts" x="175" y="193" text-anchor="middle" fill="#999">Motorised RMU switches for remote ops</text>
+            <text class="ts" x="175" y="207" text-anchor="middle" fill="#999">Self-healing networks (auto-restoration)</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_sec_reverse')">
+            <rect x="350" y="150" width="300" height="70" rx="6" class="sysop-box"/>
+            <text class="th" x="500" y="175" text-anchor="middle" class="sysop-text">Reverse power flow</text>
+            <text class="ts" x="500" y="193" text-anchor="middle" fill="#999">Solar PV can push power back upstream</text>
+            <text class="ts" x="500" y="207" text-anchor="middle" fill="#999">Causes voltage rise beyond statutory limits</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_sec_thermal')">
+            <rect x="30" y="245" width="620" height="55" rx="6" class="sysop-box"/>
+            <text class="th" x="340" y="268" text-anchor="middle" class="sysop-text">Thermal headroom challenge</text>
+            <text class="ts" x="340" y="286" text-anchor="middle" fill="#999">EV charging clusters can overload LV cables and transformers designed for pre-EV loads (1–2kW avg, now 7kW peaks)</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="tier-pane" id="pane-cust-sysop">
+        <svg width="100%" viewBox="0 0 680 380" role="img">
+          <text class="ts" x="30" y="25" fill="#2E7D32">System Operation — Customer</text>
+
+          <g class="hotspot" onclick="showDetail('sysop_cust_dfs')">
+            <rect x="30" y="45" width="290" height="90" rx="6" class="sysop-box"/>
+            <text class="th" x="175" y="70" text-anchor="middle" class="sysop-text">Demand Flexibility Service</text>
+            <text class="ts" x="175" y="88" text-anchor="middle" fill="#999">NESO pays customers to reduce usage</text>
+            <text class="ts" x="175" y="104" text-anchor="middle" fill="#999">Typically 5–7pm on tight winter days</text>
+            <text class="ts" x="175" y="120" text-anchor="middle" fill="#999">Now year-round since Nov 2024</text>
+            <text class="ts" x="175" y="128" text-anchor="middle" fill="#999">Via Octopus, OVO, etc. aggregators</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_cust_hh')">
+            <rect x="350" y="45" width="300" height="90" rx="6" class="sysop-box"/>
+            <text class="th" x="500" y="70" text-anchor="middle" class="sysop-text">Half-hourly settlement</text>
+            <text class="ts" x="500" y="88" text-anchor="middle" fill="#999">MHHS: Market-wide Half-Hourly Settlement</text>
+            <text class="ts" x="500" y="104" text-anchor="middle" fill="#999">Every smart meter now settled per HH period</text>
+            <text class="ts" x="500" y="120" text-anchor="middle" fill="#999">Enables accurate ToU tariffs</text>
+            <text class="ts" x="500" y="128" text-anchor="middle" fill="#999">Rolled out end of 2025</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_cust_v2g')">
+            <rect x="30" y="160" width="290" height="80" rx="6" class="sysop-box"/>
+            <text class="th" x="175" y="185" text-anchor="middle" class="sysop-text">Vehicle-to-Grid (V2G)</text>
+            <text class="ts" x="175" y="203" text-anchor="middle" fill="#999">EV battery exports to grid at peak</text>
+            <text class="ts" x="175" y="219" text-anchor="middle" fill="#999">Charges cheap overnight, sells at 5pm</text>
+            <text class="ts" x="175" y="233" text-anchor="middle" fill="#999">10M EVs by 2030 = potential 70 GW flex</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_cust_btm')">
+            <rect x="350" y="160" width="300" height="80" rx="6" class="sysop-box"/>
+            <text class="th" x="500" y="185" text-anchor="middle" class="sysop-text">Behind-the-meter optimisation</text>
+            <text class="ts" x="500" y="203" text-anchor="middle" fill="#999">Solar + battery + EV + heat pump</text>
+            <text class="ts" x="500" y="219" text-anchor="middle" fill="#999">Home energy management systems (HEMS)</text>
+            <text class="ts" x="500" y="233" text-anchor="middle" fill="#999">Maximise self-consumption &amp; export value</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_cust_voltage')">
+            <rect x="30" y="265" width="620" height="50" rx="6" class="sysop-box"/>
+            <text class="th" x="340" y="288" text-anchor="middle" class="sysop-text">Statutory voltage limits at the socket: 230V +10% / -6% (216.2V to 253V)</text>
+            <text class="ts" x="340" y="306" text-anchor="middle" fill="#999">Voltage complaints are one of the most common DNO customer contacts</text>
+          </g>
+
+          <g class="hotspot" onclick="showDetail('sysop_cust_hydrogen')">
+            <rect x="30" y="335" width="620" height="40" rx="6" class="sysop-box"/>
+            <text class="th" x="340" y="358" text-anchor="middle" class="sysop-text">Future: hydrogen electrolysis as flexible industrial load (absorbs surplus renewable generation)</text>
+          </g>
+        </svg>
+      </div>
+
+    </section>
+
+    <aside class="info-col">
+      <div class="info-img" id="info-img"><span>Select a component</span></div>
+      <div class="info-name" id="info-name">UK electricity network</div>
+      <div class="info-desc" id="info-desc">Six tiers from generation to socket, three layers: physical network, market and money, system operation. Pick a view and tier above, then click any component in the schematic.</div>
+      <a class="info-link" id="info-link" target="_blank" rel="noopener" style="display:none">Learn more &rarr;</a>
+    </aside>
+  </main>
+
+  <!-- Timeline -->
+  <section class="timeline-section">
+    <h2>How the grid was built</h2>
+    <div class="timeline">
+      <div class="tl-item milestone" onclick="showDetail('hist_1926')"><span class="tl-year">1926</span> <span class="tl-text">Central Electricity Board created — the idea of a national grid</span></div>
+      <div class="tl-item" onclick="showDetail('hist_1935')"><span class="tl-year">1935</span> <span class="tl-text">132kV "Gridiron" energised — first nationwide network</span></div>
+      <div class="tl-item" onclick="showDetail('hist_1947')"><span class="tl-year">1947</span> <span class="tl-text">Nationalisation — British Electricity Authority</span></div>
+      <div class="tl-item" onclick="showDetail('hist_1957')"><span class="tl-year">1957</span> <span class="tl-text">Calder Hall — first commercial nuclear power</span></div>
+      <div class="tl-item milestone" onclick="showDetail('hist_1965')"><span class="tl-year">1965</span> <span class="tl-text">400kV Supergrid begins — the backbone we still use today</span></div>
+      <div class="tl-item milestone" onclick="showDetail('hist_1990')"><span class="tl-year">1990</span> <span class="tl-text">Privatisation — CEGB split into PowerGen, National Power, NGC</span></div>
+      <div class="tl-item" onclick="showDetail('hist_1998')"><span class="tl-year">1998</span> <span class="tl-text">NETA replaces the Pool — bilateral trading begins</span></div>
+      <div class="tl-item" onclick="showDetail('hist_2001')"><span class="tl-year">2001</span> <span class="tl-text">BETTA extends trading to Scotland — single GB market</span></div>
+      <div class="tl-item" onclick="showDetail('hist_2013')"><span class="tl-year">2013</span> <span class="tl-text">Electricity Market Reform — CfDs and Capacity Market introduced</span></div>
+      <div class="tl-item milestone" onclick="showDetail('hist_2017')"><span class="tl-year">2017</span> <span class="tl-text">First coal-free day in Britain (21 April)</span></div>
+      <div class="tl-item" onclick="showDetail('hist_2019')"><span class="tl-year">2019</span> <span class="tl-text">First coal-free week — and the 2050 net zero target legislated</span></div>
+      <div class="tl-item milestone" onclick="showDetail('hist_2024a')"><span class="tl-year">Sep 2024</span> <span class="tl-text">Last coal plant closes — Ratcliffe-on-Soar, after 57 years</span></div>
+      <div class="tl-item milestone" onclick="showDetail('hist_2024b')"><span class="tl-year">Oct 2024</span> <span class="tl-text">NESO created — system operator nationalised, separated from National Grid</span></div>
+      <div class="tl-item" onclick="showDetail('hist_2025a')"><span class="tl-year">Jan 2025</span> <span class="tl-text">Greenlink interconnector to Ireland goes live</span></div>
+      <div class="tl-item" onclick="showDetail('hist_2025b')"><span class="tl-year">Jul 2025</span> <span class="tl-text">REMA confirms single national wholesale price (rejects zonal pricing)</span></div>
+    </div>
+  </section>
+
+  <!-- Regulatory framework -->
+  <section class="reg-section">
+    <h2>Regulatory framework</h2>
+    <svg width="100%" viewBox="0 0 680 250" role="img">
+      <!-- DESNZ -->
+      <g class="hotspot" onclick="showDetail('reg_desnz')">
+        <rect x="250" y="10" width="180" height="40" rx="6" fill="#E3F2FD" stroke="#1565C0"/>
+        <text class="th" x="340" y="35" text-anchor="middle" fill="#0D47A1">DESNZ</text>
+      </g>
+      <text class="ts" x="340" y="8" text-anchor="middle" fill="#999">Energy policy</text>
+      <line x1="340" y1="50" x2="340" y2="75" stroke="#999" stroke-width="1.5"/>
+
+      <!-- Ofgem -->
+      <g class="hotspot" onclick="showDetail('reg_ofgem')">
+        <rect x="250" y="75" width="180" height="40" rx="6" fill="#FFF3E0" stroke="#E65100"/>
+        <text class="th" x="340" y="100" text-anchor="middle" fill="#BF360C">Ofgem</text>
+      </g>
+      <text class="ts" x="440" y="100" fill="#999">Independent regulator</text>
+
+      <!-- Lines from Ofgem -->
+      <line x1="250" y1="115" x2="105" y2="150" stroke="#999" stroke-width="1"/>
+      <line x1="340" y1="115" x2="340" y2="150" stroke="#999" stroke-width="1"/>
+      <line x1="430" y1="115" x2="575" y2="150" stroke="#999" stroke-width="1"/>
+
+      <!-- NESO -->
+      <g class="hotspot" onclick="showDetail('reg_neso')">
+        <rect x="30" y="150" width="150" height="40" rx="6" fill="#E8F5E9" stroke="#388E3C"/>
+        <text class="th" x="105" y="175" text-anchor="middle" fill="#2E7D32">NESO</text>
+      </g>
+      <text class="ts" x="105" y="202" text-anchor="middle" fill="#999">System operator</text>
+
+      <!-- TOs -->
+      <g class="hotspot" onclick="showDetail('reg_tos')">
+        <rect x="220" y="150" width="240" height="40" rx="6" fill="#FAECE7" stroke="#993C1D"/>
+        <text class="th" x="340" y="175" text-anchor="middle" fill="#993C1D">TOs: NGET, SPT, SSEN-T</text>
+      </g>
+      <text class="ts" x="340" y="202" text-anchor="middle" fill="#999">Transmission owners (RIIO-T2)</text>
+
+      <!-- DNOs -->
+      <g class="hotspot" onclick="showDetail('reg_dnos')">
+        <rect x="500" y="150" width="150" height="40" rx="6" fill="#f0f7fc" stroke="#378ADD"/>
+        <text class="th" x="575" y="175" text-anchor="middle" fill="#0C447C">6 DNO groups</text>
+      </g>
+      <text class="ts" x="575" y="202" text-anchor="middle" fill="#999">14 licence areas (RIIO-ED2)</text>
+
+      <!-- RIIO bar -->
+      <g class="hotspot" onclick="showDetail('reg_riio')">
+        <rect x="30" y="220" width="620" height="24" rx="4" fill="#F5F5F5" stroke="#BDBDBD"/>
+        <rect x="30" y="220" width="186" height="24" rx="4" fill="#E0E0E0" stroke="#BDBDBD"/>
+        <text class="ts" x="123" y="236" text-anchor="middle">RIIO-T2/ED2 (2021–2028)</text>
+        <rect x="216" y="220" width="434" height="24" rx="4" fill="#FFF9C4" stroke="#F9A825"/>
+        <text class="ts" x="433" y="236" text-anchor="middle" fill="#8B6914">RIIO-T3/ED3 (2028–2033)</text>
+      </g>
+    </svg>
+  </section>
+
+  <div class="footer">Images fetched from Wikipedia on demand. Colour coding: coral = 400/275kV, blue = 132/11kV, teal = 33kV, amber = generation, green = renewables, grey = LV. Gold = market. Green boxes = system operation.</div>
+</div>
+
+<script>
+const details = {
+  // ---- Stats ----
+  stat_peak: { name: "Peak electricity demand", desc: "GB peak demand was 47.1 GW in 2022, down significantly from 61.5 GW in 2007. The decline reflects energy efficiency improvements, deindustrialisation, embedded generation (rooftop solar reducing net demand), and demand-side response. However, electrification of heat and transport is expected to push peak demand back up towards 65–85 GW by 2050, requiring massive network reinforcement.", url: "https://en.wikipedia.org/wiki/Electricity_sector_in_the_United_Kingdom", wiki: "Electrical_grid" },
+  stat_renewables: { name: "Renewables share: 52.5%", desc: "In 2025, renewables generated 52.5% of GB electricity for the second consecutive year above 50%. Wind was the single largest source at 87.1 TWh (up 4.1% year-on-year), with solar at 20 TWh (up 37%). Zero-carbon generation (including nuclear) reached 57% of the rolling 12-month average by February 2026. The government targets a fully decarbonised power sector by 2030.", url: "https://en.wikipedia.org/wiki/Renewable_energy_in_the_United_Kingdom", wiki: "Renewable_energy_in_the_United_Kingdom" },
+  stat_interconnectors: { name: "Interconnector capacity: 10.3 GW", desc: "GB has 10 operational electricity interconnectors totalling 10.3 GW: IFA (2 GW, France), IFA2 (1 GW, France), ElecLink (1 GW, France via Channel Tunnel), Nemo (1 GW, Belgium), BritNed (1 GW, Netherlands), NSL (1.4 GW, Norway), Viking Link (1.4 GW, Denmark), Moyle (500 MW, Northern Ireland), East-West (500 MW, Ireland), and Greenlink (500 MW, Ireland, live January 2025). Target: 18 GW by 2030.", url: "https://en.wikipedia.org/wiki/Electricity_interconnector", wiki: "Electricity_interconnector" },
+  stat_queue: { name: "Connection queue: 756 GW", desc: "The grid connection queue has ballooned to approximately 756 GW of generation and storage projects awaiting connection — over 10 times current peak demand. Typical wait times for transmission-connected projects are 10–15 years. The queue is widely recognised as the single biggest bottleneck to delivering the UK's clean energy targets. NESO's connections reform programme (Gate 2 process) aims to prioritise viable projects and clear speculative applications.", url: "https://www.neso.energy/industry-information/connections-reform", wiki: "Electrical_grid" },
+  stat_constraints: { name: "Constraint costs: \u00A31.9bn/yr", desc: "Transmission constraint costs reached \u00A31.9 billion in 2024/25, representing 71% of total system balancing costs. The primary bottleneck is the B6 boundary between Scotland and England, where abundant wind generation exceeds the ~6 GW transfer capacity southward. Scottish wind farms were paid \u00A3350 million in 2025 alone to curtail output. Meanwhile, gas plants in the south were paid to turn on as replacement. Costs are forecast to reach \u00A34–8 billion annually by 2030 without new transmission investment.", url: "https://en.wikipedia.org/wiki/Electricity_sector_in_the_United_Kingdom", wiki: "Electrical_grid" },
+  stat_network: { name: "Network length: ~800,000 km", desc: "The GB electricity network comprises roughly 25,000 km of transmission lines (400kV, 275kV, 132kV in Scotland) plus approximately 775,000 km of distribution cables and overhead lines. There are around 820,000 distribution substations transforming voltage from 11kV down to 400V. The transmission network has approximately 340 substations. Overhead lines dominate in rural areas; underground cables dominate in urban areas (underground cable costs roughly 10x more per km).", url: "https://en.wikipedia.org/wiki/National_Grid_(Great_Britain)", wiki: "National_Grid_(Great_Britain)" },
+
+  // ---- Physical tier intros ----
+  intro_gen: { name: "Generation", desc: "Where mechanical or solar energy becomes electrical energy. GB mix: CCGT, nuclear, offshore + onshore wind, solar, hydro, biomass, grid-scale batteries. NESO dispatches them half-hourly against the Balancing Mechanism.", img: "Marchwood Power Station entrance - geograph.org.uk - 1107787.jpg" },
+  intro_tx: { name: "Transmission network", desc: "The 400kV and 275kV backbone moving bulk power from generators to GSPs. Owned by NGET, SPT, and SSEN-T. Operated in real time by NESO. Hosts HVDC interconnectors to Ireland, France, Belgium, the Netherlands, Norway, and Denmark.", img: "Dead-end pylon 400 kV Silchester UK 2017.jpg" },
+  intro_gsp: { name: "Grid Supply Point", desc: "Where transmission steps down to distribution (400/275kV \u2192 132kV in E&W). Both a physical boundary and a settlement boundary \u2014 BSC metering here drives wholesale settlement for every supplier drawing from the GSP Group.", img: "Capenhurst 400kV - 275kV and 132kV Substations - geograph.org.uk - 198471.jpg" },
+  intro_primary: { name: "Primary distribution", desc: "132kV to 11kV, via Bulk Supply Points (BSPs, 132/33kV) and Primary substations (33/11kV). The middle layer of the distribution network \u2014 owned by the DNOs and where most large industrial connections live.", img: "Ince 132 kV switchyard.jpg" },
+  intro_secondary: { name: "Secondary distribution", desc: "11kV to 400V, via distribution substations on every few streets. Ground-mounted, pole-mounted, or kiosk/package. The LV side fans out through pillars and service cables to every home, shop, and office.", img: "Distribution substation, Barleyfields Court, Wetherby (4th August 2018).jpg" },
+  intro_cust: { name: "Customer premises", desc: "Service cable enters via the cutout, passes through the smart meter, lands at the consumer unit. Final circuits fan out to sockets, lights, cooker \u2014 plus EV chargers, batteries, and solar inverters that push power back.", wiki: "Consumer_unit" },
+
+  // ---- Market tier intros ----
+  intro_gen_market: { name: "Market: Generation", desc: "Generators earn revenue from multiple streams: wholesale market (day-ahead and intraday), the Balancing Mechanism, Capacity Market contracts, CfDs for renewables, and ancillary service payments. The merit order determines which plants run: cheapest marginal cost dispatched first, with the clearing price set by the most expensive unit needed to meet demand." },
+  intro_tx_market: { name: "Market: Transmission", desc: "The transmission network is funded through TNUoS charges paid by generators and demand, totalling ~\u00A33.5bn/year across 27 charging zones. The Balancing Mechanism and constraint management are the largest cost centres, with the B6 Scotland-England boundary driving the majority of \u00A31.9bn in annual constraint costs." },
+  intro_gsp_market: { name: "Market: Grid Supply Point", desc: "GSPs are settlement boundaries. The 14 GSP Groups each have Class 1/2 metering that drives wholesale settlement. TNUoS charges stop here and DUoS charges begin. Supplier volumes are allocated based on their customers' meter readings within each GSP Group." },
+  intro_primary_market: { name: "Market: Primary Distribution", desc: "DNOs recover costs through DUoS charges with Red/Amber/Green time-of-use bands. RIIO-ED2 (2023\u20132028) sets allowed revenue at ~\u00A325bn. Large industrial customers connect at 33kV or 132kV for lower per-unit network charges. Connection charges follow a 'shallowish' methodology." },
+  intro_secondary_market: { name: "Market: Secondary Distribution", desc: "DUoS charges are passed through to customer bills by suppliers, making up about 25% of a typical domestic bill. DNOs earn incentive payments (or penalties) based on reliability targets. Flexibility markets are emerging as alternatives to traditional reinforcement." },
+  intro_cust_market: { name: "Market: Customer", desc: "The customer bill bundles wholesale energy (~40%), network costs (~25%), policy levies (~20%), supplier margin (~8%), and VAT (5%). The energy price cap, set quarterly by Ofgem, limits what suppliers can charge. Market-wide half-hourly settlement (2025) enables accurate time-of-use tariffs." },
+
+  // ---- SysOp tier intros ----
+  intro_gen_sysop: { name: "System Op: Generation", desc: "Generators provide essential system services beyond energy: frequency response (keeping the grid at 50Hz), inertia (resisting frequency change), reactive power (voltage support), and black start capability (restarting from total blackout). As synchronous machines retire and inverter-based generation grows, these services are increasingly procured through competitive markets." },
+  intro_tx_sysop: { name: "System Op: Transmission", desc: "NESO operates the transmission system from two control rooms (Wokingham and Warwick), coordinating with three TOs and six DNOs. The core job: forecast demand, schedule generation, manage constraints, and balance supply and demand every second. The Balancing Mechanism is the primary tool, accepting bids and offers after gate closure." },
+  intro_gsp_sysop: { name: "System Op: GSP", desc: "At the GSP boundary, operational SCADA metering (4-second updates) provides real-time visibility, while protection systems coordinate between TO and DNO equipment. Intertrip schemes automatically disconnect generators when transmission circuits are lost, preventing cascading overloads." },
+  intro_primary_sysop: { name: "System Op: Primary Distribution", desc: "Primary substations manage voltage through Automatic Voltage Control (AVC) driving tap changers, handle fault level limits as DER connections grow, and increasingly use Active Network Management (ANM) to curtail distributed generation in real time when the network approaches its limits." },
+  intro_secondary_sysop: { name: "System Op: Secondary Distribution", desc: "The secondary network faces the biggest operational transformation: smart meter data is providing the first real-time picture of LV network loading, EV charging clusters are challenging transformer and cable ratings, and reverse power flow from rooftop solar is causing voltage excursions. LV automation and self-healing networks are the DNO response." },
+  intro_cust_sysop: { name: "System Op: Customer", desc: "Customers are becoming active grid participants through Demand Flexibility Service (shifting usage away from peaks), V2G (exporting EV battery power at peak), and behind-the-meter optimisation of solar, batteries, and heat pumps. Half-hourly settlement makes these behaviours commercially viable." },
+
+  // ---- Physical: Generation ----
+  gen_fuel: { name: "Fuel / primary energy", desc: "Thermal input. Natural gas is the big one in GB (CCGT fleet ~30GW), with smaller biomass (Drax), energy-from-waste, and a shrinking coal fleet. Nuclear uses fissile assemblies. Renewables substitute fuel with wind, sun, or water.", url: "https://en.wikipedia.org/wiki/Combined_cycle_power_plant", wiki: "Combined_cycle_power_plant" },
+  gen_turbine: { name: "Turbine (prime mover)", desc: "Converts thermal or kinetic energy into rotational shaft energy. Gas turbines spin at 3000 rpm to stay synchronous with the 50Hz grid. CCGT plants pair a gas turbine with a heat-recovery steam generator driving a second turbine \u2014 ~60% efficiency.", url: "https://en.wikipedia.org/wiki/Gas_turbine", wiki: "Gas_turbine" },
+  gen_alternator: { name: "Generator (alternator)", desc: "Three-phase synchronous machine. A DC-excited rotor produces a rotating magnetic field; stator windings see an induced EMF. Output typically 11\u201325kV, balancing copper losses against insulation cost. Hydrogen or water cooled at large ratings.", url: "https://en.wikipedia.org/wiki/Electric_generator", wiki: "Electric_generator" },
+  gen_cb: { name: "Generator circuit breaker", desc: "Interrupts generator fault currents (100 kA+) and isolates the machine for starting, shutdown, and maintenance. Usually SF6-insulated. In CCGTs, the GCB is what lets you start the gas turbine in 'motoring' mode using the generator as a motor.", url: "https://en.wikipedia.org/wiki/Circuit_breaker", wiki: "Circuit_breaker" },
+  gen_gsu: { name: "Generator step-up transformer (GSU)", desc: "Steps generator voltage (11\u201325kV) up to transmission (275 or 400kV). A 660 MW unit needs a ~750 MVA GSU. Outdoor, oil-filled, with a tap changer. Typically the single largest piece of plant at a station.", url: "https://en.wikipedia.org/wiki/Transformer", wiki: "Transformer" },
+  gen_export: { name: "Export connection", desc: "Overhead line or cable from the GSU up to the connection point at a transmission substation. Governed by the Grid Code and the station's CUSC (Connection and Use of System) Agreement. Large stations often have two export circuits for N-1.", url: "https://en.wikipedia.org/wiki/Electric_power_transmission", img: "Pembroke Power Station - Switchgear Station - geograph.org.uk - 1413066.jpg" },
+  gen_station: { name: "Station auxiliaries", desc: "Pumps, fans, control rooms, compressors, coolers \u2014 everything the station needs to run itself. Fed from a unit auxiliary transformer tapped off the generator, with a station transformer from the grid as backup. Black-start capable stations have standby diesel gens.", url: "https://en.wikipedia.org/wiki/Power_station", img: "Marchwood Power Station entrance - geograph.org.uk - 1107787.jpg" },
+  gen_wind: { name: "Wind turbines", desc: "Variable-speed machines with full-scale power electronic converters. Offshore units are now 14\u201318 MW each, rotor diameters over 220m. Connected at 66kV (modern offshore) or 33kV, through an offshore substation, then HVAC or HVDC to shore.", url: "https://en.wikipedia.org/wiki/Wind_turbine", wiki: "Wind_turbine" },
+  gen_solar: { name: "Solar PV farms", desc: "Utility-scale PV (10\u2013100+ MW in GB) uses string or central inverters stepping DC up through a medium-voltage transformer, connecting at 11 or 33kV. Zero synchronous inertia \u2014 an operability headache solved by grid-forming inverters and synchronous condensers.", url: "https://en.wikipedia.org/wiki/Photovoltaic_power_station", wiki: "Photovoltaic_power_station" },
+  gen_nuclear: { name: "Nuclear", desc: "PWRs (Sizewell B; Hinkley Point C under construction) are 1.2\u20131.6 GW per unit. Connected at 400kV. Provide baseload and synchronous inertia. Operated to a strict nuclear safety case \u2014 every grid fault near site is analysed for reactor impact.", url: "https://en.wikipedia.org/wiki/Nuclear_power_plant", wiki: "Nuclear_power_plant" },
+  gen_hydro: { name: "Hydro and battery storage", desc: "GB hydro is mostly Scottish (run-of-river plus Dinorwig and Cruachan pumped storage, ~2.8 GW). Grid-scale batteries (BESS) now exceed 5 GW \u2014 2h and 4h systems bidding into BM, Dynamic Containment, and wholesale arbitrage. Both extremely flexible vs thermal.", url: "https://en.wikipedia.org/wiki/Hydroelectricity", wiki: "Hydroelectricity" },
+
+  // ---- Physical: Transmission ----
+  tx_substation: { name: "Grid substation", desc: "Transmission-to-transmission substation. Doesn't step down to distribution \u2014 it's a node where 400kV circuits meet, with bus-section CBs, voltage regulation, and often 400/275kV interconnection. Sites like Iver, Bramford, Harker.", url: "https://en.wikipedia.org/wiki/Electrical_substation", img: "Dalmally 275kV Substation Project - geograph.org.uk - 5463245.jpg" },
+  tx_ohl: { name: "400kV overhead line", desc: "Twin or quad ACSR conductors on lattice steel pylons, ~400A per conductor continuous. Quad-bundle 400kV circuits carry 2\u20133 GW. Spans 300\u2013400m; towers 30\u201350m. Underground cable is ~10\u00d7 more expensive per km, so most GB transmission is OHL.", url: "https://en.wikipedia.org/wiki/Overhead_power_line", img: "Dead-end pylon 400 kV Silchester UK 2017.jpg" },
+  tx_hvdc: { name: "HVDC interconnector", desc: "Two converter stations linked by subsea/underground DC cable. GB has ten live: IFA, IFA2, BritNed, Nemo, ElecLink, NSL (Norway), Viking (Denmark), Moyle, East-West, plus Greenlink to Ireland. Future: EuroLink, LionLink, Nautilus, Tarchon. ~10 GW today, target 18 GW by 2030.", url: "https://en.wikipedia.org/wiki/High-voltage_direct_current", wiki: "High-voltage_direct_current" },
+  tx_svc: { name: "SVC / STATCOM", desc: "Static VAR Compensator or STATic COMpensator. Injects or absorbs reactive power to hold voltage, with response times of tens of ms \u2014 much faster than mechanically-switched reactors. Installed at nodes with weak short-circuit strength or nearby HVDC converters.", url: "https://en.wikipedia.org/wiki/Static_VAR_compensator", img: "Static VAR compensator.svg" },
+  tx_neso: { name: "NESO control", desc: "National Energy System Operator (formerly National Grid ESO, nationalised Oct 2024). Two control rooms at Wokingham and Warwick balance GB supply and demand every half-second, run the Balancing Mechanism, and coordinate outages across all three TOs.", url: "https://www.neso.energy/", wiki: "Electrical_grid" },
+
+  // ---- Physical: GSP ----
+  gsp_incoming: { name: "Incoming transmission circuit", desc: "Overhead line or underground cable from the transmission system. 400kV in England and Wales, 275kV or 132kV in Scotland. Typically two to four incoming circuits \u2014 losing one should never cause a customer outage (N-1 security standard).", url: "https://en.wikipedia.org/wiki/Electric_power_transmission", img: "Dead-end pylon 400 kV Silchester UK 2017.jpg" },
+  gsp_disconnector: { name: "Disconnector (isolator)", desc: "Off-load switch giving a visible break for safe working. Cannot interrupt fault current, so the adjacent circuit breaker must be open first. A full bay has disconnectors on both sides of every CB plus an earth switch.", url: "https://en.wikipedia.org/wiki/Disconnector", wiki: "Disconnector" },
+  gsp_cb: { name: "Circuit breaker", desc: "Interrupts normal and fault currents in 40\u201380 ms, tripped by protection relays in the control building. Modern kit is SF6 or vacuum; older GSPs still run air-blast or oil-filled CBs being replaced.", url: "https://en.wikipedia.org/wiki/Circuit_breaker", img: "Ince circuit breakers.jpg" },
+  gsp_hvbus: { name: "400kV busbar", desc: "The rail that ties incoming circuits to SGTs \u2014 usually tubular aluminium on post insulators. Arrangements: single, mesh, double busbar, or 1\u00bd-breaker, chosen on reliability vs cost. Larger GSPs with heavier load use more redundant schemes.", url: "https://en.wikipedia.org/wiki/Busbar", img: "400kV substation - geograph.org.uk - 6951473.jpg" },
+  gsp_sgt: { name: "Supergrid transformer (SGT)", desc: "Steps 400 or 275kV down to 132kV. Usually 240 MVA or 1000 MVA, oil-filled, with on-load tap changer. Two to four SGTs in parallel \u2014 lose one and the others pick up the load. Owned by the Transmission Owner.", url: "https://en.wikipedia.org/wiki/Transformer", img: "Eurotunnel substation at Folkstone Terminal UK 2013.jpg" },
+  gsp_boundary: { name: "TO / DNO boundary + settlement metering", desc: "Physical and commercial boundary between TO and DNO assets. BSC Class 1 or 2 metering (the M symbols) measures active + reactive energy across the boundary \u2014 readings drive TNUoS, DUoS, and wholesale settlement. GB has 14 GSP Groups.", url: "https://www.elexon.co.uk/", wiki: "Electricity_meter" },
+  gsp_lvbus: { name: "132kV busbar", desc: "The first DNO-owned rail in most GSPs. Connects SGT secondaries to outgoing feeders. Some sites have quadrature boosters (phase-shifting transformers) to actively control flow between parallel 132kV paths.", url: "https://en.wikipedia.org/wiki/Busbar", img: "Ince 132 kV switchyard.jpg" },
+  gsp_feeder: { name: "132kV outgoing feeder", desc: "Heads to a Bulk Supply Point (BSP) where 132kV is stepped down to 33kV. A GSP typically has four to eight outgoing 132kV feeders \u2014 the DNO's transmission-adjacent backbone.", url: "https://en.wikipedia.org/wiki/Electric_power_distribution", wiki: "Electric_power_distribution" },
+  gsp_control: { name: "Control building", desc: "Relay room with protection relays, SCADA RTUs, telecontrol to NESO and the DNO control centre, local HMI, and auxiliary supplies. Modern refurbs run IEC 61850 GOOSE messaging over a substation LAN.", url: "https://en.wikipedia.org/wiki/SCADA", wiki: "Protective_relay" },
+  gsp_reactive: { name: "Reactive compensation", desc: "Shunt reactors absorb VArs from lightly-loaded circuits; capacitor banks and SVCs inject at heavy load. Keeps voltage within statutory limits \u2014 and because MVAr flow across the boundary is charged under TNUoS, there's commercial incentive to net it out locally.", url: "https://en.wikipedia.org/wiki/Reactive_power", img: "Static VAR compensator.svg" },
+  gsp_earth: { name: "Earth grid", desc: "Buried copper mesh tying every piece of metalwork to a single earth potential. Dissipates fault current into the ground and keeps step and touch voltages within personnel-safety limits. Ground resistance is a key commissioning measurement.", url: "https://en.wikipedia.org/wiki/Earthing_system", img: "TN-C-S-earthing.svg" },
+
+  // ---- Physical: Primary ----
+  primary_132in: { name: "132kV incoming feeder", desc: "Comes from a GSP, usually overhead line or underground cable. BSPs typically have two incoming 132kV circuits for N-1 \u2014 lose one and the BSP can still feed its downstream network on the other.", url: "https://en.wikipedia.org/wiki/Electric_power_distribution", img: "Beauly - Mossford 132kV Pylon Line - geograph.org.uk - 6093348.jpg" },
+  primary_bsp: { name: "Bulk Supply Point (BSP)", desc: "132/33kV substation. Functionally similar to a GSP but one tier down. Two or more transformers (60 MVA each typical), a 33kV busbar, multiple 33kV outgoing feeders. Major DNO control point \u2014 bay switching at a BSP shows up in the DNO's SCADA maps.", url: "https://en.wikipedia.org/wiki/Electrical_substation", img: "Ince 132 kV switchyard.jpg" },
+  primary_bsp_trafo: { name: "BSP transformer (132/33kV)", desc: "Steps 132kV down to 33kV. Typically 60 MVA, oil-filled with an on-load tap changer. Usually two in parallel for N-1. Owned by the DNO (unlike SGTs which are owned by the TO).", url: "https://en.wikipedia.org/wiki/Transformer", img: "Eurotunnel substation at Folkstone Terminal UK 2013.jpg" },
+  primary_33feeder: { name: "33kV feeder", desc: "Connects a BSP to a Primary substation \u2014 often several km of underground cable or overhead line. One BSP typically feeds six to twelve primaries. Big industrial customers (data centres, steelworks, hospitals) often connect directly here rather than going down to 11kV.", url: "https://en.wikipedia.org/wiki/Electric_power_distribution", wiki: "Electric_power_distribution" },
+  primary_33in: { name: "33kV incoming circuit", desc: "Into the Primary substation from a BSP. Usually duplicated for N-1 resilience. The 33kV side is switched by disconnectors and circuit breakers, same pattern as GSP/BSP but at lower voltage.", url: "https://en.wikipedia.org/wiki/Electric_power_distribution", wiki: "Electric_power_distribution" },
+  primary_disconnector: { name: "33kV disconnector", desc: "Off-load isolator giving a visible break. Operated only with the adjacent CB already open. Primary substations often use motorised disconnectors for remote SCADA control \u2014 less common than on GSPs but increasingly standard on RIIO-ED2 refurbs.", url: "https://en.wikipedia.org/wiki/Disconnector", wiki: "Disconnector" },
+  primary_cb: { name: "33kV circuit breaker", desc: "Interrupts normal and fault currents on the 33kV side. Usually SF6 or vacuum, indoor air-insulated switchgear (AIS) in older kit, gas-insulated switchgear (GIS) in compact modern refurbs. Tripped by overcurrent, earth fault, or distance protection.", url: "https://en.wikipedia.org/wiki/Circuit_breaker", img: "Ince circuit breakers.jpg" },
+  primary_33bus: { name: "33kV busbar", desc: "Ties incoming 33kV circuits to the primary transformers. Usually double busbar or single busbar with bus-section CB. Arrangement determines which bits you can switch out for maintenance without taking the whole substation offline.", url: "https://en.wikipedia.org/wiki/Busbar", wiki: "Busbar" },
+  primary_trafo: { name: "Primary transformer (33/11kV)", desc: "Steps 33kV down to 11kV. Typically 10\u201330 MVA, oil-filled, on-load tap changer driven by the Automatic Voltage Control scheme. Usually two in parallel with N-1 sizing \u2014 the surviving transformer can carry 100% of load through its short-term rating.", url: "https://en.wikipedia.org/wiki/Distribution_transformer", img: "Cat Hill electricity substation.jpg" },
+  primary_oltc: { name: "On-load tap changer (OLTC)", desc: "Lets the transformer adjust its turns ratio while live, typically \u00b115% in 17\u201321 steps. Driven by the substation's Automatic Voltage Control (AVC) relay, which targets a voltage setpoint that may be adjusted for load (line drop compensation).", url: "https://en.wikipedia.org/wiki/Tap_changer", wiki: "Tap_changer" },
+  primary_11bus: { name: "11kV busbar", desc: "Distributes transformer output to the 11kV outgoing feeders. Indoor switchgear panels in modern primary substations \u2014 a neat row of CBs, each feeding one 11kV ring or radial out into the local network.", url: "https://en.wikipedia.org/wiki/Busbar", wiki: "Busbar" },
+  primary_11feeder: { name: "11kV outgoing feeder", desc: "Heads out to distribution (secondary) substations \u2014 typically 4 to 20 per primary. Normally operated as open rings: a feeder goes out to a chain of substations via RMUs, with a normally-open point partway around that can be closed to restore supply after a fault.", url: "https://en.wikipedia.org/wiki/Electric_power_distribution", wiki: "Electric_power_distribution" },
+  primary_protection: { name: "Protection and AVC", desc: "Relay room handles overcurrent, earth fault, and distance protection on 33kV and 11kV sides, plus Automatic Voltage Control (AVC) driving the OLTCs. Under RIIO-ED2, most DNOs are migrating to IEC 61850 GOOSE-based protection with centralised disturbance recording.", url: "https://en.wikipedia.org/wiki/SCADA", wiki: "Protective_relay" },
+
+  // ---- Physical: Secondary ----
+  sec_11in: { name: "11kV from primary (ring)", desc: "Comes from a Primary substation as part of an 11kV ring. Typical urban ring passes through six to twelve distribution substations via RMUs, with a normally-open point somewhere in the middle. In a fault, the DNO closes the NOP to restore supply to the healthy half.", url: "https://en.wikipedia.org/wiki/Electric_power_distribution", wiki: "Electric_power_distribution" },
+  sec_rmu: { name: "Ring Main Unit (RMU)", desc: "Compact switchgear on the 11kV ring, typically three-way: two ring switches plus a transformer-protection fused-switch. SF6 or oil-insulated, outdoor ground-level. Modern units have motorised operators for remote DNO control \u2014 a big piece of LV automation.", url: "https://en.wikipedia.org/wiki/Ring_main_unit", wiki: "Ring_main_unit" },
+  sec_hvfuse: { name: "HV fuse / transformer protection", desc: "The fused-switch in the RMU that protects the distribution transformer. Blows on a transformer fault, isolating the transformer from the ring. Newer RMUs use VCBs (vacuum circuit breakers) with a protection relay instead of fuses \u2014 faster and resettable.", url: "https://en.wikipedia.org/wiki/Fuse_(electrical)", wiki: "Ring_main_unit" },
+  sec_trafo: { name: "Distribution transformer (11kV/400V)", desc: "Steps 11kV down to 400V three-phase (230V phase-to-neutral). Typically 500\u20131000 kVA in urban ground-mounted subs, serving 100\u2013400 homes on a feeder. Oil-filled, no tap changer (off-circuit taps only). Sits inside the brick/GRP kiosk you see on housing estates.", url: "https://en.wikipedia.org/wiki/Distribution_transformer", img: "Distribution substation, Barleyfields Court, Wetherby (4th August 2018).jpg" },
+  sec_lvbus: { name: "LV busbar", desc: "Four-bar (three phases + neutral) busbar inside the LV switchboard. Distributes the transformer's output to the LV ways (feeders). Sized for the transformer's full secondary current \u2014 a 1000 kVA transformer gives ~1440 A per phase at 400V.", url: "https://en.wikipedia.org/wiki/Busbar", wiki: "Busbar" },
+  sec_lvfuse: { name: "LV fuse way", desc: "BS 88 fuses on each outgoing LV way. Typical ratings 200A, 315A, or 400A. These are discriminating fuses \u2014 they should blow before the transformer HV fuse does on an LV fault. Most DNOs still use fuses rather than LV breakers because fuses are cheap, reliable, and fast.", url: "https://en.wikipedia.org/wiki/Fuse_(electrical)", wiki: "Fuse_(electrical)" },
+  sec_lvfeeder: { name: "LV feeder", desc: "Underground cable (or overhead line in rural areas) from the distribution substation to an LV pillar or directly to customer cutouts. Typically 185\u2013300mm\u00b2 aluminium waveform concentric, sized to match the fuse rating and expected load.", url: "https://en.wikipedia.org/wiki/Electric_power_distribution", wiki: "Electric_power_distribution" },
+  sec_pole: { name: "Pole-mounted transformer", desc: "Rural equivalent of the ground-mounted substation. 25\u2013315 kVA typically, hung on a timber or concrete pole, fed from overhead 11kV. Drop-out fuse or pole-mounted RMU for protection. Common wherever housing density doesn't justify buried cables.", url: "https://en.wikipedia.org/wiki/Distribution_transformer", wiki: "Distribution_transformer" },
+  sec_package: { name: "Package substation", desc: "Factory-built kiosk with HV switchgear, transformer, and LV board pre-assembled in a GRP or steel enclosure. Dropped onto a concrete plinth and connected up. Faster to install than traditional brick subs; favoured for retrofits and new housing estates.", url: "https://en.wikipedia.org/wiki/Electrical_substation", img: "Aberbeeg Kiosk electricity substation, Aberbeeg - geograph.org.uk - 5222109.jpg" },
+  sec_ground: { name: "Ground-mounted substation", desc: "The classic brick or GRP kiosk on a housing estate. 500\u20131000 kVA typical, with ventilation louvres and the DNO's warning signs. Access via padlocked door for the DNO jointer. This is what most UK domestic customers are fed from.", url: "https://en.wikipedia.org/wiki/Electrical_substation", img: "Distribution substation, Barleyfields Court, Wetherby (4th August 2018).jpg" },
+  sec_pillar: { name: "LV pillar (feeder pillar)", desc: "Street-level 400V cabinet \u2014 the green or grey box on the pavement. LV feeders are split, fused, and distributed to customer service cables. 100\u2013400A fuses per way. Last piece of visible DNO kit before a cable enters a property.", url: "https://en.wikipedia.org/wiki/Electric_power_distribution", img: "Feeder pillar box, St Ann's Road, Malvern - geograph.org.uk - 1587039.jpg" },
+
+  // ---- Physical: Customer ----
+  cust_service: { name: "Service cable", desc: "LV cable from the nearest feeder or pillar into the property. Typically 25mm\u00b2 or 16mm\u00b2 concentric copper/aluminium. Terminates at the cutout just inside the building. DNO-owned up to and including the cutout \u2014 everything downstream is the customer's.", url: "https://en.wikipedia.org/wiki/Service_drop", wiki: "Electricity_meter" },
+  cust_cutout: { name: "Service head / cutout", desc: "Sealed unit with the main fuse (60, 80, or 100A BS 1361 or BS 88-3). DNO-owned and sealed \u2014 you are not legally allowed to break the seal. Ultimate fault protection for the property and the end of DNO responsibility.", url: "https://en.wikipedia.org/wiki/Service_drop", img: "Domestic Consumer Unit part 3.JPG" },
+  cust_meter: { name: "Smart meter (SMETS2)", desc: "Measures import and export half-hourly, communicates via the DCC over cellular or mesh radio, with a Zigbee link to an In-Home Display. Settlement-grade. Market-wide half-hourly settlement rolled out end of 2025 \u2014 every smart meter is now a settlement meter.", url: "https://en.wikipedia.org/wiki/Smart_meter", wiki: "Smart_meter" },
+  cust_cu: { name: "Consumer unit (fuse board)", desc: "Main switch + RCDs/RCBOs + MCBs protecting each final circuit. 18th Edition (BS 7671) requires metal enclosures for domestic CUs since 2016. A modern install will have SPDs, AFDDs on selected circuits, and separate RCDs per bank of MCBs.", url: "https://en.wikipedia.org/wiki/Distribution_board", wiki: "Distribution_board" },
+  cust_circuits: { name: "Final circuits", desc: "Wiring fanning out from the CU to sockets, lights, appliances. Sockets on 32A ring or radial (2.5mm\u00b2 T&E), lighting on 6A radials (1.0\u20131.5mm\u00b2), cooker on 32\u201340A radial (6\u201310mm\u00b2), shower on 40\u201350A radial (10mm\u00b2). Ring circuits are a UK peculiarity \u2014 most countries use radials.", url: "https://en.wikipedia.org/wiki/Ring_circuit", img: "UK BS1363 double wall socket.jpg" },
+  cust_earth: { name: "Main earthing", desc: "Ties the installation's earth to a reference potential. Most modern connections are TN-C-S (PME) \u2014 the DNO's neutral provides the earth. Older properties may be TN-S (separate earth) or TT (local earth rod). Determines design under BS 7671.", url: "https://en.wikipedia.org/wiki/Earthing_system", img: "TN-C-S-earthing.svg" },
+  cust_solar: { name: "Rooftop solar PV", desc: "Typical domestic array is 3\u20136 kWp. Panels on the roof, DC to an inverter, AC out to a dedicated breaker on the CU. G98 notified (\u226416A/phase) or G99 applied for (larger), with anti-islanding protection. Often paired with a battery and hot-water diverter.", url: "https://en.wikipedia.org/wiki/Photovoltaic_system", wiki: "Photovoltaic_system" },
+  cust_ev: { name: "EV home charger", desc: "7 kW single-phase or 22 kW three-phase wallbox, fed from a dedicated 32A (or 40A) MCB on the CU. Type-A or Type-B RCD protection. Smart chargers must meet the EV Smart Charge Points Regulations 2021 \u2014 off-peak default, randomisation, cyber. Will dominate household peak demand this decade.", url: "https://en.wikipedia.org/wiki/Charging_station", img: "ChargePoint Home Charger.jpg" },
+
+  // ---- Market details ----
+  mkt_gen_merit: { name: "Merit order", desc: "The merit order is the sequence in which generators are dispatched, ranked by marginal cost (the cost of producing one extra MWh). Wind and solar have near-zero marginal cost and run first. Nuclear runs baseload. Gas CCGTs fill the middle. Gas OCGTs and oil are expensive peakers used only at high demand. The wholesale price is set by the marginal (most expensive) unit needed to meet demand \u2014 so all generators receive this price, giving low-cost renewables a windfall.", url: "https://en.wikipedia.org/wiki/Merit_order", wiki: "Merit_order" },
+  mkt_gen_cfd: { name: "Contracts for Difference (CfD)", desc: "CfDs are 15-year contracts between a renewable generator and the Low Carbon Contracts Company (LCCC). A 'strike price' is set at auction. If the wholesale reference price is below the strike, LCCC pays the generator the difference. If above, the generator pays back. This gives revenue certainty and has driven dramatic cost reductions: offshore wind strike prices fell from \u00a3155/MWh (2014) to under \u00a340/MWh (2023). AR6 (2024) was the largest round yet, securing 9.6 GW of new capacity.", url: "https://en.wikipedia.org/wiki/Contract_for_difference", wiki: "Contract_for_difference" },
+  mkt_gen_capacity: { name: "Capacity Market", desc: "The Capacity Market ensures there's enough generation available to meet peak demand. NESO forecasts future demand, then auctions capacity obligations: T-4 (four years ahead) for new build, T-1 (one year ahead) for existing plant. Winners receive a \u00a3/kW/year payment in exchange for being available when called. Penalties for non-delivery. BESS, DSR, and interconnectors can all participate alongside traditional generators.", url: "https://en.wikipedia.org/wiki/Capacity_market", wiki: "Capacity_market" },
+  mkt_gen_revenue: { name: "Revenue stacking", desc: "Modern generators, especially BESS, earn from multiple streams simultaneously: wholesale market trading (buy low, sell high), Balancing Mechanism (bid/offer acceptance), frequency response (Dynamic Containment, Dynamic Regulation, Dynamic Moderation), Capacity Market payments, and ancillary services. A well-optimised 2-hour battery can earn \u00a3100\u2013150/kW/year from stacking these revenues, making the business case viable without subsidy.", url: "https://en.wikipedia.org/wiki/Energy_storage", wiki: "Battery_storage_power_station" },
+  mkt_gen_unbundled: { name: "The unbundled model", desc: "Since privatisation in 1990, the UK electricity industry has been 'unbundled' into separate roles: generators produce electricity, network operators (TOs and DNOs) transport it, and suppliers retail it to customers. A single company cannot own both generation and network assets in the same area. This separation was designed to prevent monopoly abuse and create competitive markets for generation and supply, while regulating the natural monopoly networks.", url: "https://en.wikipedia.org/wiki/Electricity_sector_in_the_United_Kingdom", wiki: "Electricity_sector_in_the_United_Kingdom" },
+  mkt_gen_wholesale: { name: "Wholesale electricity market", desc: "GB electricity is traded across multiple timeframes. Day-ahead: generators and suppliers trade via EPEX Spot and N2EX exchanges, or bilateral OTC contracts, for delivery the next day. Intraday: adjustments as forecasts update. Balancing Mechanism: NESO accepts final bids and offers after gate closure (1 hour before delivery) to balance residual imbalance. Prices can swing from negative (surplus wind) to \u00a36,000/MWh (system stress). The imbalance price (system price) settles any party that doesn't match their contracted position.", url: "https://en.wikipedia.org/wiki/Electricity_market", wiki: "Electricity_market" },
+
+  mkt_tx_tnuos: { name: "TNUoS charges", desc: "Transmission Network Use of System charges recover the cost of building and maintaining the transmission network (~\u00a33.5bn/year). Charged across 27 zones: generators in areas with surplus capacity (Scotland) pay more; demand in deficit areas (south-east England) pays more. This locational signal was designed to encourage generation near demand, but the explosive growth of Scottish wind has made the signal less effective at influencing siting decisions.", url: "https://en.wikipedia.org/wiki/Transmission_system_operator", wiki: "Electrical_grid" },
+  mkt_tx_b6: { name: "B6 boundary bottleneck", desc: "The B6 boundary is the transmission interface between Scotland and England. With ~6 GW of transfer capacity but far more wind generation in Scotland, power regularly exceeds what can flow south. When this happens, NESO pays Scottish wind farms to curtail (via the BM) and pays gas plants in England to increase output. This cost \u00a31.9bn in 2024/25 and is rising fast. Four new undersea HVDC cables (Eastern Green Links 1 & 2, plus two more) are planned to add ~8 GW, but only 2 GW is likely by 2030 due to planning delays.", url: "https://en.wikipedia.org/wiki/Electricity_sector_in_the_United_Kingdom", wiki: "Electrical_grid" },
+  mkt_tx_bsc: { name: "BSC settlement", desc: "The Balancing and Settlement Code (BSC), administered by Elexon, governs how generators and suppliers are settled financially. Every half-hour period, each party's metered output or consumption is compared to their contracted position. Any imbalance is settled at the System Buy Price or System Sell Price. The whole system relies on accurate metering at GSPs, generator terminals, and increasingly at customer smart meters.", url: "https://www.elexon.co.uk/", wiki: "Electricity_market" },
+  mkt_tx_bm: { name: "Balancing Mechanism", desc: "The BM is NESO's primary tool for real-time balancing. After gate closure (1 hour before each settlement period), generators and large consumers submit bids (to reduce output/increase demand, at a price) and offers (to increase output/reduce demand, at a price). NESO accepts the cheapest actions needed to balance. Total BM costs were ~\u00a32.7bn in 2024/25, with constraint management (paying generators to move output for network reasons) being the dominant cost.", url: "https://en.wikipedia.org/wiki/Balancing_mechanism_(electricity)", wiki: "Balancing_mechanism_(electricity)" },
+  mkt_tx_interconn: { name: "Interconnector trading", desc: "GB's 10 interconnectors participate in the Single Day-Ahead Coupling (SDAC) mechanism, where capacity is allocated implicitly based on price differentials between connected markets. If electricity is cheaper in France than GB, power flows to GB, narrowing the price gap. Interconnector owners earn from congestion rents. Ofgem regulates returns via a 'cap and floor' regime: guaranteed minimum revenue (floor) but capped upside. New links like LionLink (Netherlands) and Nautilus (Belgium) are in development.", url: "https://en.wikipedia.org/wiki/Electricity_interconnector", wiki: "Electricity_interconnector" },
+
+  mkt_gsp_groups: { name: "14 GSP Groups", desc: "Great Britain is divided into 14 GSP Groups, each roughly corresponding to a DNO licence area. Examples: SEEB (South East England), EMEB (East Midlands), SWEB (South West), SPEN (Scottish Power). Each group aggregates multiple physical GSPs. Supplier volumes are allocated per group. TNUoS demand charges vary by GSP Group, reflecting the cost of serving that area from the transmission network.", url: "https://www.elexon.co.uk/", wiki: "Electrical_grid" },
+  mkt_gsp_metering: { name: "Settlement metering at GSP", desc: "BSC Class 1 and Class 2 meters at the TO/DNO boundary record active and reactive power flow in both directions, at half-hourly granularity. These are the highest-accuracy meters in the system (\u00b10.2% to \u00b10.5%). Their readings form the basis of wholesale electricity settlement \u2014 determining how much energy each GSP Group consumed and therefore what each supplier within that group owes.", url: "https://www.elexon.co.uk/", wiki: "Electricity_meter" },
+  mkt_gsp_allocation: { name: "Supplier volume allocation", desc: "Total energy flowing through a GSP Group is measured at the boundary meters, then allocated to individual suppliers based on their customers' meter readings. For customers with smart meters, actual half-hourly data is used. For legacy meters, standardised 'profiles' estimate consumption shape. Market-wide Half-Hourly Settlement (MHHS, rolled out 2025) is making all smart-metered customers individually settled, improving accuracy and enabling time-of-use tariffs.", url: "https://www.elexon.co.uk/", wiki: "Electricity_market" },
+  mkt_gsp_losses: { name: "Transmission losses", desc: "About 1.7% of energy is lost as heat in the transmission network (I\u00b2R losses in conductors and core losses in transformers). Losses are allocated to market participants via Transmission Loss Factors (TLFs), which vary by location and time. Generators far from demand centres (e.g., Scottish wind farms) face higher loss factors, slightly reducing their effective revenue.", url: "https://en.wikipedia.org/wiki/Electric_power_transmission", wiki: "Electric_power_transmission" },
+  mkt_gsp_duos: { name: "TNUoS to DUoS handover", desc: "The GSP is where transmission charging (TNUoS) ends and distribution charging (DUoS) begins. The two charging methodologies are completely different: TNUoS uses 27 locational zones with generation and demand tariffs; DUoS uses time-of-use bands (Red/Amber/Green) with fixed and unit charges. Both ultimately appear on the customer's bill, though the customer sees only their supplier's bundled tariff.", url: "https://en.wikipedia.org/wiki/Electricity_pricing", wiki: "Electricity_pricing" },
+
+  mkt_pri_duos: { name: "DUoS charges", desc: "Distribution Use of System charges fund the DNO's network. They use a time-of-use structure: Red (peak, typically 4\u20137pm weekdays, November\u2013February), Amber (shoulder), Green (off-peak, nights and weekends). Charges include a fixed daily rate (\u00a3/day), a unit rate (p/kWh varying by band), and a capacity charge (\u00a3/kVA/day for larger customers). Different for each of the 14 DNO licence areas.", url: "https://en.wikipedia.org/wiki/Electricity_pricing", wiki: "Electricity_pricing" },
+  mkt_pri_riio: { name: "RIIO-ED2 price control", desc: "RIIO (Revenue = Incentives + Innovation + Outputs) is Ofgem's framework for regulating monopoly network companies. RIIO-ED2 (2023\u20132028) sets the total revenue each DNO can recover, currently ~\u00a325bn across all six groups. DNOs must deliver specified outputs (reliability, customer service, decarbonisation) and can earn bonuses or face penalties. Innovation funding is ring-fenced. RIIO-ED3 (2028\u20132033) planning has begun.", url: "https://www.ofgem.gov.uk/energy-policy-and-regulation/policy-and-regulatory-programmes/network-price-controls-2021-2028-riio-2/electricity-distribution-riio-ed2", wiki: "Ofgem" },
+  mkt_pri_connection: { name: "Connection charges", desc: "When a new customer or generator connects to the distribution network, they pay connection charges. GB uses 'shallowish' charging: the customer pays 100% of dedicated connection assets (their cable, their transformer) plus a proportion of any shared reinforcement needed upstream. Large industrial connections at 33kV can cost \u00a3100k to \u00a35M+ depending on reinforcement. Connection charges are a major barrier for renewable developers.", url: "https://en.wikipedia.org/wiki/Electricity_sector_in_the_United_Kingdom", wiki: "Electrical_grid" },
+  mkt_pri_industrial: { name: "Large industrial customers", desc: "Data centres, steelworks, hospitals, and other large consumers often connect at 33kV or 132kV to reduce their DUoS charges (higher voltage = lower per-unit network costs) and get more reliable supply. They have half-hourly settlement meters and often negotiate bespoke connection agreements. Some participate in demand-side response, earning payments for reducing load at system peaks.", url: "https://en.wikipedia.org/wiki/Electricity_sector_in_the_United_Kingdom", wiki: "Electrical_grid" },
+  mkt_pri_dno_map: { name: "6 DNO groups, 14 licence areas", desc: "UK Power Networks (3 areas: Eastern, London, South East), Electricity North West (1: North West), Northern Powergrid (2: North East, Yorkshire), SP Energy Networks (2: South Scotland, Merseyside/North Wales), Scottish & Southern Electricity Networks (2: North Scotland, Southern England), National Grid Electricity Distribution (4: West Midlands, East Midlands, South West, South Wales). Each area has its own DUoS tariffs and connection processes.", url: "https://en.wikipedia.org/wiki/Distribution_network_operator", wiki: "Distribution_network_operator" },
+
+  mkt_sec_passthrough: { name: "DUoS pass-through", desc: "Suppliers pay DUoS to DNOs based on their customers' metered consumption in each time band, then recover these costs through their retail tariffs. For a typical domestic customer, network costs (TNUoS + DUoS + BSUoS) make up about 25% of the bill. The customer never sees the DUoS charge directly \u2014 it's bundled into their supplier's unit rate and standing charge.", url: "https://en.wikipedia.org/wiki/Electricity_pricing", wiki: "Electricity_pricing" },
+  mkt_sec_incentives: { name: "DNO incentive mechanisms", desc: "Under RIIO-ED2, DNOs face financial incentives tied to performance. The Interruptions Incentive Scheme (IIS) penalises DNOs for outages above their target and rewards performance below target. The Incentive on Connections Engagement (ICE) assesses how well DNOs serve connection customers. There are also incentives for environmental impact, customer vulnerability support, and innovation. These can swing DNO revenue by tens of millions per year.", url: "https://www.ofgem.gov.uk/", wiki: "Ofgem" },
+  mkt_sec_losses: { name: "Distribution losses", desc: "Distribution networks lose approximately 5\u20137% of the energy they carry, mostly as heat in LV cables and distribution transformers. Losses are higher at low voltage because currents are much higher (P = I\u00b2R). DNOs have loss reduction targets under RIIO-ED2. Measures include replacing older transformers with lower-loss amorphous metal core units, upgrading undersized cables, and balancing phase loads.", url: "https://en.wikipedia.org/wiki/Electric_power_distribution", wiki: "Electric_power_distribution" },
+  mkt_sec_flexibility: { name: "Flexibility markets", desc: "DNOs are increasingly procuring 'flexibility' \u2014 paying distributed energy resources (batteries, EVs, heat pumps, industrial loads) to increase or decrease consumption at specific times and locations. This is cheaper and faster than building new cables and transformers. All six DNO groups now run flexibility tenders via platforms like Piclo Flex. Typical procurement: a 33/11kV substation nearing its rating buys 2 MW of turn-down flexibility for winter evenings.", url: "https://en.wikipedia.org/wiki/Smart_grid", wiki: "Smart_grid" },
+  mkt_sec_wayleaves: { name: "Wayleaves and easements", desc: "DNOs need legal rights to run cables and overhead lines across private land. A wayleave is an annual payment for permission (revocable). An easement is a permanent right (one-off payment). When landowners refuse, DNOs can apply for compulsory wayleaves under the Electricity Act 1989. This process can take years and is a significant source of delay for network reinforcement projects.", url: "https://en.wikipedia.org/wiki/Wayleave", wiki: "Wayleave" },
+
+  mkt_cust_bill: { name: "Domestic bill breakdown", desc: "A typical GB domestic electricity bill of ~\u00a3850/year (2025) breaks down roughly as: wholesale energy cost ~40%, network charges (TNUoS + DUoS + BSUoS) ~25%, policy/environmental levies ~20% (funding CfDs, warm home discount, ECO insulation), supplier operating costs and margin ~8%, and VAT at 5%. The exact split shifts with wholesale prices. When gas prices spiked in 2022, wholesale rose to ~55% of the bill.", url: "https://en.wikipedia.org/wiki/Electricity_pricing", wiki: "Electricity_pricing" },
+  mkt_cust_cap: { name: "Energy price cap", desc: "Ofgem sets the Default Tariff Cap quarterly, limiting the maximum unit rate and standing charge that suppliers can charge customers on standard variable tariffs. It's based on a model of efficient supplier costs, including forecast wholesale prices, network charges, policy costs, and a supplier margin (~1.9%). The cap doesn't limit total bills \u2014 it caps the rate, so higher usage still means higher bills. Introduced in January 2019 to protect disengaged customers from being overcharged.", url: "https://en.wikipedia.org/wiki/Energy_price_cap", wiki: "Ofgem" },
+  mkt_cust_tariffs: { name: "Tariff types", desc: "Fixed tariffs lock in a rate for 12\u201324 months. Variable (SVT) tariffs track the price cap. Time-of-Use tariffs like Octopus Agile pass through half-hourly wholesale prices, rewarding customers who shift consumption to cheap periods. EV-specific tariffs offer 5\u20137p/kWh overnight. The Smart Export Guarantee (SEG) requires suppliers to pay for exported solar/battery power, typically 4\u201315p/kWh. As MHHS rolls out, expect more sophisticated ToU products.", url: "https://en.wikipedia.org/wiki/Electricity_pricing", wiki: "Electricity_pricing" },
+  mkt_cust_switching: { name: "Supplier competition", desc: "GB has about 20 active domestic electricity suppliers, down from 70+ before the 2021\u201322 energy crisis bankrupted many smaller entrants. The 'Big Six' (now Big Five after SSE sold its supply business to OVO) still serve the majority. Since 2019, switching takes 5 working days (previously up to 3 weeks). The Competition and Markets Authority estimated competitive switching saved engaged customers \u00a3200\u2013300/year.", url: "https://en.wikipedia.org/wiki/Electricity_supplier", wiki: "Electricity_sector_in_the_United_Kingdom" },
+  mkt_cust_connections: { name: "Grid connection process", desc: "Connecting new generation or large demand to the network follows: Application \u2192 Offer (DNO/TO assesses capacity) \u2192 Agreement \u2192 Design \u2192 Works \u2192 Energisation. For transmission-connected projects, the queue is now 756 GW with 10\u201315 year waits. NESO's connections reform (Gate 2) aims to clear speculative applications and prioritise viable projects. For domestic connections (new builds, EV chargers), the process is simpler but can still take weeks for reinforcement.", url: "https://www.neso.energy/industry-information/connections-reform", wiki: "Electrical_grid" },
+  mkt_cust_hh: { name: "Market-wide Half-Hourly Settlement (MHHS)", desc: "Rolled out by end of 2025, MHHS means every smart meter is now settled on actual half-hourly consumption data, rather than using estimated profiles. This enables accurate time-of-use tariffs (charge more at peak, less off-peak), rewards customers who shift demand, and gives suppliers and DNOs much better visibility of consumption patterns. It's the foundation for a flexible, smart grid.", url: "https://www.elexon.co.uk/", wiki: "Smart_meter" },
+
+  // ---- System Operation details ----
+  sysop_gen_frequency: { name: "Frequency response", desc: "The grid must maintain 50.00 Hz. Demand exceeding supply causes frequency to drop; excess supply causes it to rise. Normal operating range is 49.8\u201350.2 Hz. Primary response (0\u201310 seconds): generator governors automatically adjust output based on droop settings. Secondary response (30s\u201330min): NESO's Automatic Generation Control adjusts setpoints. High frequency response: generators reduce output above 50.4 Hz. Below 48.8 Hz, automatic low-frequency demand disconnection (LFDD) sheds load in blocks. Below 47 Hz, generators start tripping \u2014 cascading blackout risk.", url: "https://en.wikipedia.org/wiki/Utility_frequency", wiki: "Utility_frequency" },
+  sysop_gen_inertia: { name: "System inertia", desc: "Inertia is the kinetic energy stored in the spinning masses of synchronous generators and motors connected to the grid. It resists changes in frequency \u2014 higher inertia means slower frequency change after a disturbance, giving control systems more time to respond. As coal and gas plants close and non-synchronous wind/solar grow, system inertia is falling. NESO now procures 'stability' services and mandates grid-forming capability from new wind farms. Synchronous condensers (spinning machines with no generation) are being installed specifically for inertia.", url: "https://en.wikipedia.org/wiki/Inertia", wiki: "Electrical_grid" },
+  sysop_gen_blackstart: { name: "Black start", desc: "Black start is the ability to restart the electricity grid from a total shutdown without relying on external power. NESO contracts approximately 12 black start providers \u2014 typically pumped hydro (Dinorwig, Cruachan), some gas turbines with diesel start capability, and increasingly BESS. The black start plan divides GB into 'islands' that are restored independently then synchronised. A full system restoration would take 24\u201372 hours. The service costs ~\u00a360m/year.", url: "https://en.wikipedia.org/wiki/Black_start", wiki: "Black_start" },
+  sysop_gen_reactive: { name: "Reactive power obligation", desc: "The Grid Code requires all large generators to operate between 0.85 leading and 0.95 lagging power factor, providing or absorbing reactive power as needed by the system. NESO pays for enhanced reactive capability through the Optional Reactive Power Service (ORPS). Reactive power doesn't travel well over long distances, so it must be provided locally \u2014 a particular challenge as wind farms replace conventional generators in remote areas.", url: "https://en.wikipedia.org/wiki/Reactive_power", wiki: "Reactive_power" },
+  sysop_gen_dynamic: { name: "Dynamic frequency services", desc: "Dynamic Containment (DC), Dynamic Regulation (DR), and Dynamic Moderation (DM) are post-fault frequency response services procured day-ahead by NESO. DC provides fast-acting response within 1 second of a frequency event; DR provides continuous proportional response; DM provides slower response. Battery storage is the dominant provider, earning \u00a310\u201350/MW/hour. These services replaced the older Enhanced Frequency Response and Firm Frequency Response products.", url: "https://www.neso.energy/", wiki: "Electrical_grid" },
+  sysop_gen_ancillary: { name: "Ancillary services overview", desc: "NESO procures ancillary services worth ~\u00a31.5bn/year across four categories: (1) Frequency response \u2014 DC/DR/DM plus mandatory governor response, (2) Reserve \u2014 Short-Term Operating Reserve (STOR), fast reserve, BM start-up, (3) Reactive power \u2014 obligatory and enhanced, (4) Black start \u2014 ability to restart from shutdown. The ancillary services market is being reformed to open participation to smaller, distributed resources including aggregated domestic batteries and EVs.", url: "https://www.neso.energy/", wiki: "Ancillary_services_(electric_power)" },
+
+  sysop_tx_control: { name: "NESO control room", desc: "NESO operates the GB transmission system from two mirrored control rooms at Wokingham (primary) and Warwick (backup), staffed 24/7 by ~200 engineers across shifts. Control engineers monitor frequency, voltage, and power flows across every transmission circuit via SCADA. They issue dispatch instructions to generators, manage planned outages with all three TOs, and activate emergency procedures during system events. The control room runs on a custom Energy Management System (EMS) with state estimation, contingency analysis, and automatic generation control.", url: "https://www.neso.energy/", wiki: "Electrical_grid" },
+  sysop_tx_forecast: { name: "Demand forecasting", desc: "NESO forecasts demand across multiple timeframes: seasonal (months ahead, for outage planning), week-ahead (fine-tuning generator commitments), day-ahead (scheduling and market), within-day (adjusting as actuals diverge), and real-time (second-by-second balancing). Forecasts incorporate weather models (wind speed, temperature, cloud cover), historical patterns, TV pickup events, and increasingly solar output models. Forecast errors are managed through the BM and reserve holdings.", url: "https://www.neso.energy/", wiki: "Electrical_grid" },
+  sysop_tx_bm: { name: "Balancing Mechanism operation", desc: "Gate closure occurs 1 hour before each half-hour settlement period. After gate closure, NESO can only balance through the BM. Generators submit Bid-Offer Data (BOD): offers to increase output at a price, bids to decrease at a price. NESO's dispatch algorithm selects the cheapest combination of actions to balance. A 'Bid-Offer Acceptance' (BOA) is the instruction sent to a generator. The system price for each period is set by the most expensive action taken. In 2024/25, ~\u00a32.7bn was spent on BM actions.", url: "https://en.wikipedia.org/wiki/Balancing_mechanism_(electricity)", wiki: "Balancing_mechanism_(electricity)" },
+  sysop_tx_warnings: { name: "System warnings", desc: "NESO issues Electricity Margin Notices (EMNs) when the forecast margin between available generation and demand falls below certain thresholds. A Capacity Market Notice is triggered when the margin is less than 500 MW (roughly 1% of peak demand). In extreme events, NESO can issue demand control instructions to DNOs, requiring them to disconnect blocks of customers (rolling blackouts) to prevent total system collapse. This last happened in August 2019.", url: "https://www.neso.energy/", wiki: "Electrical_grid" },
+  sysop_tx_outages: { name: "Outage planning", desc: "Transmission equipment needs regular maintenance. NESO coordinates outage windows with the three TOs, typically scheduling major work for spring and autumn when demand is lower. Planning starts 2+ years ahead for major outages. Each outage is assessed for security impact: will the system still meet N-1 criteria with this circuit out? Conflicts between TO maintenance requests and system security needs are resolved through a formal process.", url: "https://en.wikipedia.org/wiki/Electrical_grid", wiki: "Electrical_grid" },
+  sysop_tx_n1: { name: "N-1 security standard", desc: "The SQSS (Security and Quality of Supply Standard) requires that the transmission system must be able to survive the loss of any single circuit, transformer, or generator without cascading failures or customer disconnection. This means every major piece of equipment has redundancy: two circuits where one would suffice for normal load, two transformers at every GSP. Operating to N-1 at all times is the fundamental design principle of the transmission system.", url: "https://en.wikipedia.org/wiki/N-1_contingency", wiki: "Electrical_grid" },
+
+  sysop_gsp_intertrip: { name: "Intertrip schemes", desc: "Intertrip is an automatic protection scheme where a generator is instantaneously disconnected when a specific transmission circuit trips. It prevents post-fault overloading of remaining circuits. Widely used on the B6 boundary: if one of the Scotland-England circuits trips, an intertrip signal automatically disconnects a specified amount of Scottish generation within milliseconds. The generator is compensated for the lost output. Intertrip capacity is a key constraint on how much generation can connect in constrained areas.", url: "https://en.wikipedia.org/wiki/Protective_relay", wiki: "Protective_relay" },
+  sysop_gsp_constraint: { name: "Constraint management at GSP", desc: "When power flow through a GSP's circuits approaches thermal or stability limits, NESO takes 'constraint actions' via the BM: paying generators on the exporting side to reduce output (bids) and generators on the importing side to increase output (offers). The cost difference between the bid and offer is the constraint cost. At heavily loaded boundaries like B6, constraint costs can exceed \u00a310m in a single day during high wind conditions.", url: "https://en.wikipedia.org/wiki/Electrical_grid", wiki: "Electrical_grid" },
+  sysop_gsp_opmetering: { name: "Operational vs settlement metering", desc: "GSPs have two parallel metering systems. Operational (SCADA) meters provide real-time data every 4 seconds for control room use \u2014 accuracy is less critical than speed. Settlement meters (Class 1/2) provide highly accurate half-hourly readings for financial settlement \u2014 speed is less critical than accuracy (\u00b10.2\u20130.5%). Both measure the same power flows but serve entirely different purposes.", url: "https://en.wikipedia.org/wiki/Electricity_meter", wiki: "Electricity_meter" },
+  sysop_gsp_protection: { name: "Protection coordination", desc: "At the GSP boundary, TO and DNO protection systems must coordinate so that a fault on one side is cleared quickly without tripping healthy equipment on the other side. This requires careful setting of relay pickup currents, time delays, and communication-based schemes (intertripping, blocking). Modern IEC 61850 GOOSE messaging over fibre allows sub-4ms peer-to-peer signalling between relays, enabling faster and more selective protection.", url: "https://en.wikipedia.org/wiki/Protective_relay", wiki: "Protective_relay" },
+  sysop_gsp_voltage: { name: "Voltage control at boundary", desc: "SGT tap changers and reactive compensation equipment at the GSP work together to hold the 132kV busbar voltage within the statutory \u00b16% of nominal for the DNO. Under light load (e.g., summer nights), lightly loaded cables generate reactive power (Ferranti effect), pushing voltage up \u2014 shunt reactors absorb the excess. Under heavy load, capacitor banks and SVCs inject reactive power to support voltage. The SGT tap changer makes coarse adjustments; reactive comp does fine-tuning.", url: "https://en.wikipedia.org/wiki/Voltage_regulation", wiki: "Voltage_regulation" },
+
+  sysop_pri_avc: { name: "Automatic Voltage Control (AVC)", desc: "AVC relays at primary substations continuously monitor the 11kV busbar voltage and drive the OLTC to maintain a target setpoint (e.g., 11.2kV). Line drop compensation adjusts the target based on load current \u2014 boosting voltage slightly at high load to compensate for voltage drop along feeders. This ensures customers at the end of long feeders still receive voltage within statutory limits (\u00b16% of nominal). With growing rooftop solar causing voltage rise at feeder ends, AVC settings are being reviewed across all DNOs.", url: "https://en.wikipedia.org/wiki/Tap_changer", wiki: "Tap_changer" },
+  sysop_pri_faultlevel: { name: "Fault level management", desc: "Every piece of switchgear has a maximum fault current rating (e.g., 25 kA for a 33kV CB). When new generators or interconnections are added, they increase the available fault current. If fault levels approach equipment ratings, either the switchgear must be replaced (expensive, slow) or connections must be limited. Fault level monitoring devices are now installed at some primary substations to track levels in real time, and 'fault level constrained' zones exist where no new connections are permitted without mitigation.", url: "https://en.wikipedia.org/wiki/Fault_(power_engineering)", wiki: "Short_circuit" },
+  sysop_pri_der: { name: "DER visibility challenge", desc: "Historically, DNOs had zero real-time visibility of embedded (distributed) generation below ~1 MW. A 5 MW solar farm on an 11kV feeder was invisible to the control room until it caused a voltage alarm. Smart meter data, LV monitoring sensors, and the Energy Networks Association's DER Register are now providing the first real-time picture. This visibility is essential for managing reverse power flows, voltage excursions, and for procuring flexibility services from DER.", url: "https://en.wikipedia.org/wiki/Distributed_generation", wiki: "Distributed_generation" },
+  sysop_pri_anm: { name: "Active Network Management (ANM)", desc: "ANM systems allow DNOs to connect more generation than the network can accommodate at peak, by automatically curtailing output when thermal or voltage limits are approached. A solar farm on a constrained 33kV feeder might be curtailed for 50 hours/year but can connect 5 years earlier than if it waited for full reinforcement. ANM is a key enabler of faster, cheaper renewable connections and is now deployed by all six DNO groups.", url: "https://en.wikipedia.org/wiki/Smart_grid", wiki: "Smart_grid" },
+
+  sysop_sec_lvmon: { name: "LV monitoring", desc: "LV monitoring uses smart meter data aggregated per secondary transformer and feeder to give DNOs visibility of loading, voltage, and power quality on the low-voltage network. Previously, DNOs only knew about LV network performance when customers complained or fuses blew. Now, transformer loading profiles reveal which substations are approaching limits, where phase imbalance is worst, and where EV charging clusters are creating new peaks. Most DNOs plan to monitor all secondary substations by end of RIIO-ED2.", url: "https://en.wikipedia.org/wiki/Smart_grid", wiki: "Smart_grid" },
+  sysop_sec_flex: { name: "Flexible connections", desc: "A flexible connection allows a distributed generator or large demand to connect faster by accepting a curtailment clause \u2014 agreeing to reduce output or consumption during network constraints. Unlike ANM (which is automated), flexible connections may use manual or semi-automated control. For a BESS developer, losing 2\u20135% of annual energy to curtailment is often acceptable versus waiting 3+ years for reinforcement. The connection agreement specifies the curtailment mechanism and limits.", url: "https://en.wikipedia.org/wiki/Smart_grid", wiki: "Distributed_generation" },
+  sysop_sec_automation: { name: "LV automation and self-healing", desc: "Modern secondary substations increasingly have motorised RMU switches that can be operated remotely from the DNO control room via SCADA. 'Self-healing' network schemes go further: when a fault is detected, automation isolates the faulted section and restores supply to healthy sections by closing normally-open points \u2014 all within 1\u20133 minutes, compared to 1\u20132 hours for a manual response. This dramatically reduces Customer Interruptions (CI) and Customer Minutes Lost (CML).", url: "https://en.wikipedia.org/wiki/Self-healing_network", wiki: "Smart_grid" },
+  sysop_sec_reverse: { name: "Reverse power flow", desc: "Traditional distribution networks were designed for one-way power flow: substation to customer. Rooftop solar on a sunny afternoon can push power back through the distribution transformer into the 11kV network. This causes voltage to rise at the LV end of feeders, potentially exceeding the upper statutory limit (253V). Solutions include: on-load tap changers on new distribution transformers (expensive), reactive power injection, smart inverter voltage droop, and curtailment of export during high-voltage conditions.", url: "https://en.wikipedia.org/wiki/Distributed_generation", wiki: "Distributed_generation" },
+  sysop_sec_thermal: { name: "Thermal headroom", desc: "LV cables and distribution transformers were sized for an era when average domestic load was 1\u20132 kW and peak was 5\u20137 kW. A 7 kW EV charger doubles peak household demand. Clusters of EVs on the same feeder can overload the cable or transformer, causing accelerated insulation aging or protective device operation. DNO solutions: smart charging (staggering start times), transformer upgrades, cable overlaying, and flexibility procurement. RIIO-ED2 allocated \u00a3billions for LV reinforcement.", url: "https://en.wikipedia.org/wiki/Electric_power_distribution", wiki: "Electric_power_distribution" },
+
+  sysop_cust_dfs: { name: "Demand Flexibility Service (DFS)", desc: "Launched by NESO during the 2022/23 energy crisis, DFS pays consumers to shift electricity usage away from peak periods (typically 5\u20137pm on tight winter days). Participants earn ~\u00a33/kWh for each kWh reduced vs baseline. Originally winter-only, expanded to year-round in November 2024. Aggregators like Octopus Energy, OVO, and others bundle household participation (via smart meters and connected devices). In its first winter, DFS delivered up to 300 MW of demand reduction.", url: "https://www.neso.energy/", wiki: "Demand_response" },
+  sysop_cust_hh: { name: "Half-hourly settlement impact", desc: "Market-wide Half-Hourly Settlement (MHHS), fully rolled out by end of 2025, means every smart meter-equipped customer is settled on actual half-hourly data rather than estimated profiles. This unlocks the full value of demand flexibility: suppliers can offer genuine time-of-use tariffs with prices that reflect actual system costs at each half-hour. Customers who shift demand (EV charging overnight, running dishwashers at midday solar peak) get rewarded. Elexon estimates MHHS will save consumers \u00a31.6bn over 10 years.", url: "https://www.elexon.co.uk/", wiki: "Smart_meter" },
+  sysop_cust_v2g: { name: "Vehicle-to-Grid (V2G)", desc: "V2G-capable chargers can export power from an EV battery back to the grid during peak demand. A 60 kWh EV battery could provide 7 kW for 4+ hours during the evening peak, then recharge overnight when electricity is cheap and wind is abundant. With 10 million EVs expected by 2030, V2G could provide up to 70 GW of flexible capacity \u2014 more than current peak demand. Challenges: battery degradation concerns (though modern chemistries are resilient), charger cost (~\u00a31,000 premium), and consumer willingness.", url: "https://en.wikipedia.org/wiki/Vehicle-to-grid", wiki: "Vehicle-to-grid" },
+  sysop_cust_btm: { name: "Behind-the-meter optimisation", desc: "A modern home with solar PV, battery storage, EV charger, and heat pump has significant flexibility. Home Energy Management Systems (HEMS) optimise across these assets: store solar in the battery, export when grid prices are high, charge the EV overnight when prices are low, pre-heat the house before the evening peak. Aggregators like Octopus, Tesla (Powerwall), and Sonnen combine thousands of such homes into a 'virtual power plant' that bids into the BM and frequency response markets.", url: "https://en.wikipedia.org/wiki/Home_energy_management", wiki: "Smart_grid" },
+  sysop_cust_voltage: { name: "Statutory voltage at the socket", desc: "UK statutory voltage is 230V +10% / -6%, giving an acceptable range of 216.2V to 253V at the customer's terminals. Most DNOs target slightly above 230V to allow for voltage drop along feeders. With increasing solar PV export, voltage at feeder ends can rise above 253V, triggering inverter trip-off. Voltage complaints are among the most common DNO customer contacts. The long-term solution is smarter voltage regulation throughout the LV network.", url: "https://en.wikipedia.org/wiki/Mains_electricity_by_country", wiki: "Mains_electricity_by_country" },
+  sysop_cust_hydrogen: { name: "Hydrogen electrolysis as flexible load", desc: "Green hydrogen production via electrolysis could become a major flexible industrial load, absorbing surplus renewable generation that would otherwise be curtailed. A 100 MW electrolyser near a wind farm could consume power during high-wind/low-demand periods and switch off at peak. This provides system balancing value, reduces constraint costs, and produces hydrogen for industrial use or transport. Several GB pilot projects are underway, with the government targeting 10 GW of electrolyser capacity by 2030.", url: "https://en.wikipedia.org/wiki/Electrolysis_of_water", wiki: "Electrolysis_of_water" },
+
+  // ---- Timeline details ----
+  hist_1926: { name: "1926: Central Electricity Board", desc: "The Electricity (Supply) Act 1926 created the Central Electricity Board (CEB), charged with building a national transmission network \u2014 the 'National Grid'. Before this, Britain had hundreds of small, incompatible local electricity systems running at different voltages and frequencies. The CEB selected the most efficient power stations and connected them with a standardised 132kV grid. This was one of the largest civil engineering projects in British history.", url: "https://en.wikipedia.org/wiki/Central_Electricity_Board", wiki: "Central_Electricity_Board" },
+  hist_1935: { name: "1935: The 132kV Gridiron", desc: "By 1935, the 132kV 'Gridiron' was complete: 4,000 miles of transmission line connecting 137 power stations across England, Scotland, and Wales. For the first time, electricity could flow between regions, and the most efficient stations could serve customers anywhere in the country. The system was standardised at 50Hz. This infrastructure remained the backbone of the grid until the 275kV and 400kV Supergrid was built in the 1960s.", url: "https://en.wikipedia.org/wiki/National_Grid_(Great_Britain)", wiki: "National_Grid_(Great_Britain)" },
+  hist_1947: { name: "1947: Nationalisation", desc: "The Electricity Act 1947 nationalised the entire UK electricity industry, creating the British Electricity Authority (BEA) and 14 Area Electricity Boards for distribution. All private and municipal electricity companies were taken into public ownership. The Central Electricity Generating Board (CEGB) was later created in 1957 to run generation and transmission in England and Wales, becoming the world's largest utility.", url: "https://en.wikipedia.org/wiki/Electricity_Act_1947", wiki: "Central_Electricity_Generating_Board" },
+  hist_1957: { name: "1957: First commercial nuclear power", desc: "Calder Hall in Cumbria became the world's first commercial nuclear power station in 1956 (grid-connected October 1956, officially opened by the Queen in October 1957). The UK went on to build a fleet of Magnox and later AGR (Advanced Gas-cooled Reactor) stations. Nuclear provided up to 25% of GB electricity in the 1990s. Today, only one AGR remains (Torness, closing 2028) plus Sizewell B (PWR, operating to ~2035) and Hinkley Point C (under construction).", url: "https://en.wikipedia.org/wiki/Calder_Hall_nuclear_power_station", wiki: "Calder_Hall_nuclear_power_station" },
+  hist_1965: { name: "1965: 400kV Supergrid", desc: "The first 400kV transmission line was energised in 1965, creating the 'Supergrid' that remains the backbone of the GB transmission system today. The move from 132kV to 400kV allowed roughly 10x more power to flow per circuit, enabling larger, more efficient power stations to be built further from demand centres. The Supergrid was extended to 275kV nodes, with the 132kV network reclassified as distribution in England and Wales.", url: "https://en.wikipedia.org/wiki/Supergrid", wiki: "National_Grid_(Great_Britain)" },
+  hist_1990: { name: "1990: Privatisation", desc: "The Electricity Act 1989 broke up the CEGB into three generating companies (National Power, PowerGen, Nuclear Electric) and a separate transmission company (National Grid Company). The 12 Area Electricity Boards became Regional Electricity Companies (RECs). The Electricity Pool provided a wholesale market. This 'unbundling' was the model copied worldwide. Competition brought prices down but also created the complex market structures that persist today.", url: "https://en.wikipedia.org/wiki/Electricity_Act_1989", wiki: "Electricity_Act_1989" },
+  hist_1998: { name: "1998: NETA replaces the Pool", desc: "The New Electricity Trading Arrangements (NETA) replaced the Electricity Pool in 2001 (announced 1998). Instead of a centrally-dispatched pool with a single price, NETA introduced bilateral trading: generators and suppliers trade directly via exchanges and over-the-counter contracts. The Balancing Mechanism handles residual imbalances. NETA reduced wholesale prices by ~20% in its first year by eliminating the gaming that had plagued the Pool.", url: "https://en.wikipedia.org/wiki/New_Electricity_Trading_Arrangements", wiki: "Electricity_market" },
+  hist_2001: { name: "2001: BETTA \u2014 single GB market", desc: "The British Electricity Trading and Transmission Arrangements (BETTA) extended NETA to Scotland in April 2005 (the policy was developed from 2001). Before BETTA, Scotland had separate trading arrangements. BETTA created a single GB-wide wholesale market with a single system operator (National Grid). Scottish generators could now sell to English customers at the same market price, though transmission constraints between Scotland and England have been a problem ever since.", url: "https://en.wikipedia.org/wiki/British_Electricity_Trading_and_Transmission_Arrangements", wiki: "Electricity_market" },
+  hist_2013: { name: "2013: Electricity Market Reform", desc: "The Energy Act 2013 introduced two landmark mechanisms: Contracts for Difference (CfDs) giving renewable generators revenue certainty via a guaranteed strike price, and the Capacity Market ensuring adequate generation capacity through competitive auctions. These replaced the Renewables Obligation (RO) and addressed growing concerns that liberalised markets alone wouldn't deliver the massive investment needed for decarbonisation. CfD auctions have since driven offshore wind costs down by over 70%.", url: "https://en.wikipedia.org/wiki/Energy_Act_2013", wiki: "Electricity_market" },
+  hist_2017: { name: "2017: First coal-free day", desc: "On 21 April 2017, Great Britain went 24 hours without burning coal for electricity for the first time since the 1880s. The symbolic milestone reflected the rapid decline of coal generation, driven by the carbon price floor, cheap gas, and growing renewables. Coal-free periods lengthened rapidly: first coal-free week in 2019, first coal-free month in 2020. The last coal plant (Ratcliffe-on-Soar) closed in September 2024.", url: "https://en.wikipedia.org/wiki/Coal_in_the_United_Kingdom", wiki: "Coal_in_the_United_Kingdom" },
+  hist_2019: { name: "2019: Coal-free week and net zero", desc: "May 2019 saw the first full week without coal generation in GB. In the same year, the UK became the first major economy to legislate a net zero greenhouse gas emissions target for 2050 (amending the Climate Change Act 2008). This set the legal framework for decarbonising the entire energy system, including the commitment to a fully decarbonised power sector by 2035 (later brought forward to 2030 by the incoming government in 2024).", url: "https://en.wikipedia.org/wiki/Climate_Change_Act_2008", wiki: "Climate_Change_Act_2008" },
+  hist_2024a: { name: "Sep 2024: Last coal plant closes", desc: "Ratcliffe-on-Soar power station in Nottinghamshire closed on 30 September 2024 after 57 years of operation, ending 142 years of coal-fired electricity generation in Britain. At its peak in the 1980s, coal provided over 70% of GB electricity. By its final year, coal's share was less than 1%. The closure was a landmark moment in the UK's energy transition, though the site is being repurposed for a zero-carbon technology and energy hub.", url: "https://en.wikipedia.org/wiki/Ratcliffe-on-Soar_power_station", wiki: "Ratcliffe-on-Soar_power_station" },
+  hist_2024b: { name: "Oct 2024: NESO created", desc: "The National Energy System Operator (NESO) was established on 1 October 2024, when the government completed the \u00a3630m acquisition of National Grid's Electricity System Operator (ESO) function under the Energy Act 2023. NESO is a public corporation, ending the anomaly of a private company (National Grid) operating the system while also owning transmission assets. NESO's expanded role includes spatial energy planning, connections reform, and coordinating across electricity, gas, and hydrogen networks.", url: "https://www.neso.energy/", wiki: "National_Energy_System_Operator" },
+  hist_2025a: { name: "Jan 2025: Greenlink interconnector", desc: "The Greenlink interconnector between Great Waterford in Ireland and Pembroke in Wales went live on 29 January 2025, adding 500 MW of capacity. This is GB's third link to the island of Ireland (after Moyle and East-West), increasing energy security and enabling more efficient use of Irish wind generation. The project took 5 years to build and cost approximately \u20ac500m.", url: "https://en.wikipedia.org/wiki/Greenlink", wiki: "Electricity_interconnector" },
+  hist_2025b: { name: "Jul 2025: REMA confirms single national price", desc: "The Review of Electricity Market Arrangements (REMA) concluded in July 2025 with the government confirming retention of a single GB-wide wholesale electricity price, rejecting the zonal pricing model that had been considered. The decision was accompanied by reforms including the Strategic Spatial Energy Plan (SSEP), Centralised Strategic Network Plan (CSNP), and connections reform. Critics argue zonal pricing would have better signalled where to build generation; supporters say it would have penalised Scottish consumers and generators.", url: "https://en.wikipedia.org/wiki/Electricity_market", wiki: "Electricity_market" },
+
+  // ---- Regulatory details ----
+  reg_desnz: { name: "DESNZ \u2014 Department for Energy Security and Net Zero", desc: "The UK government department responsible for energy policy, created in February 2023 by splitting out energy functions from BEIS. Sets the strategic direction: net zero targets, clean power 2030 goal, REMA, nuclear policy, hydrogen strategy, and the legislative framework (Energy Act 2023). Does not regulate networks directly \u2014 that's Ofgem's role.", url: "https://en.wikipedia.org/wiki/Department_for_Energy_Security_and_Net_Zero", wiki: "Department_for_Energy_Security_and_Net_Zero" },
+  reg_ofgem: { name: "Ofgem \u2014 Office of Gas and Electricity Markets", desc: "The independent energy regulator, funded by licence fees from energy companies. Ofgem's main roles: setting network company revenue through RIIO price controls, protecting consumers via the energy price cap, granting and enforcing generation/supply/network licences, running the Capacity Market and CfD allocation rounds, and overseeing market codes (BSC, CUSC, DCUSA). Ofgem must balance consumer protection, decarbonisation, and security of supply.", url: "https://en.wikipedia.org/wiki/Ofgem", wiki: "Ofgem" },
+  reg_neso: { name: "NESO \u2014 National Energy System Operator", desc: "Government-owned since October 2024 (\u00a3630m acquisition). Responsible for real-time system operation (balancing supply and demand), procurement of ancillary services, connections process, strategic network planning (CSNP, SSEP), and the future role of coordinating across electricity, gas, and hydrogen systems. Reports to DESNZ; regulated by Ofgem. ~1,200 staff across Wokingham, Warwick, and other offices.", url: "https://www.neso.energy/", wiki: "National_Energy_System_Operator" },
+  reg_tos: { name: "Transmission Owners", desc: "Three companies own and maintain the high-voltage transmission network: NGET (National Grid Electricity Transmission, England and Wales, 400/275kV), SPT (SP Transmission, central and southern Scotland, 275/132kV), and SSEN-T (Scottish and Southern Electricity Networks Transmission, northern Scotland, 275/132kV). Regulated under RIIO-T2 (2021\u20132026) with combined allowed revenue of ~\u00a315bn. TOs build and maintain assets; NESO operates them.", url: "https://en.wikipedia.org/wiki/National_Grid_(Great_Britain)", wiki: "National_Grid_(Great_Britain)" },
+  reg_dnos: { name: "Distribution Network Operators", desc: "Six DNO groups operate 14 licence areas: UK Power Networks (Eastern, London, South East), Electricity North West (North West), Northern Powergrid (North East, Yorkshire), SP Energy Networks (SP Manweb, SP Distribution), SSEN (Scottish Hydro, Southern), National Grid Electricity Distribution (West Midlands, East Midlands, South West, South Wales). Regulated under RIIO-ED2 (2023\u20132028). Transitioning from passive 'wire and pole' operators to active 'Distribution System Operators' (DSOs) managing two-way power flows.", url: "https://en.wikipedia.org/wiki/Distribution_network_operator", wiki: "Distribution_network_operator" },
+  reg_riio: { name: "RIIO price controls", desc: "RIIO (Revenue = Incentives + Innovation + Outputs) is Ofgem's framework for regulating monopoly network companies. Each price control period lasts 5 years: RIIO-T2 (transmission, 2021\u20132026) and RIIO-ED2 (distribution, 2023\u20132028). Ofgem sets the total revenue each company can earn, the outputs it must deliver (reliability, customer service, decarbonisation), and the incentives/penalties for over/under-performance. Innovation funding is ring-fenced. RIIO-T3 and RIIO-ED3 (both starting ~2028) are now being designed.", url: "https://www.ofgem.gov.uk/", wiki: "Ofgem" }
+};
+
+// ---- Core functions ----
+
+let currentMode = 'physical';
+let currentTier = 'gsp';
+let currentRequestId = 0;
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.mode-btn[data-mode="' + mode + '"]').classList.add('active');
+  showTier(currentTier);
+}
+
+function showTier(tier) {
+  currentTier = tier;
+  document.querySelectorAll('.tier-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.ctx-node').forEach(n => n.classList.remove('active'));
+
+  const paneId = 'pane-' + tier + '-' + currentMode;
+  const pane = document.getElementById(paneId);
+  if (pane) pane.classList.add('active');
+
+  document.querySelector('.ctx-node[data-tier="' + tier + '"]').classList.add('active');
+
+  // Show appropriate intro
+  const introKey = currentMode === 'physical' ? 'intro_' + tier :
+                   currentMode === 'market' ? 'intro_' + tier + '_market' :
+                   'intro_' + tier + '_sysop';
+  showDetail(introKey);
+}
+
+async function fetchWikiPageImage(title) {
+  try {
+    const url = 'https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&pithumbsize=400&titles=' + encodeURIComponent(title) + '&origin=*';
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const pages = data.query && data.query.pages;
+    if (!pages) return null;
+    const page = Object.values(pages)[0];
+    if (page && page.thumbnail) return page.thumbnail.source;
+  } catch (e) {}
+  return null;
+}
+
+function resolveImg(v) {
+  if (!v) return null;
+  if (v.startsWith('http://') || v.startsWith('https://')) return v;
+  return 'https://commons.wikimedia.org/wiki/Special:FilePath/' + encodeURIComponent(v) + '?width=500';
+}
+
+async function fetchImage(d) {
+  if (d.img) return resolveImg(d.img);
+  if (d.wiki) return await fetchWikiPageImage(d.wiki);
+  return null;
+}
+
+async function showDetail(key) {
+  const d = details[key];
+  if (!d) return;
+  const reqId = ++currentRequestId;
+
+  document.getElementById('info-name').textContent = d.name;
+  document.getElementById('info-desc').textContent = d.desc;
+
+  const link = document.getElementById('info-link');
+  if (d.url) {
+    link.href = d.url;
+    link.textContent = 'Read full article \u2192';
+    link.style.display = 'inline-flex';
+  } else {
+    link.style.display = 'none';
+  }
+
+  const imgBox = document.getElementById('info-img');
+  imgBox.innerHTML = '<span>Loading image\u2026</span>';
+  const thumbUrl = await fetchImage(d);
+  if (reqId !== currentRequestId) return;
+  if (thumbUrl) {
+    imgBox.innerHTML = '<img src="' + thumbUrl + '" alt="' + d.name + '" onerror="this.parentElement.innerHTML=\'<span>Image not available</span>\'">';
+  } else {
+    imgBox.innerHTML = '<span>No image available</span>';
+  }
+}
+</script>
+</body>
+</html>
