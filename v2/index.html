@@ -14,11 +14,18 @@
 
   /* Top header */
   .top-bar {
-    padding: 10px 16px; background: white; border-bottom: 1px solid #e0e0e0;
-    display: flex; align-items: baseline; gap: 12px;
+    padding: 0 16px; background: white; border-bottom: 1px solid #e0e0e0;
+    display: flex; align-items: center; gap: 16px; height: 44px;
   }
-  .top-bar h1 { font-size: 18px; font-weight: 600; white-space: nowrap; }
-  .top-bar .intro { color: #888; font-size: 13px; }
+  .top-bar h1 { font-size: 18px; font-weight: 600; white-space: nowrap; margin-right: 8px; }
+  .top-nav { display: flex; gap: 2px; height: 100%; }
+  .top-nav a {
+    display: flex; align-items: center; padding: 0 14px; font-size: 13px;
+    color: #666; text-decoration: none; border-bottom: 2px solid transparent;
+    transition: all 0.12s; white-space: nowrap;
+  }
+  .top-nav a:hover { color: #1a1a1a; background: #f5f5f5; }
+  .top-nav a.active { color: #185FA5; border-bottom-color: #185FA5; font-weight: 500; }
 
   /* 3-column shell */
   .shell {
@@ -149,7 +156,10 @@
 
 <div class="top-bar">
   <h1>UK electricity network</h1>
-  <span class="intro">Interactive schematic — pick a category, then click any component</span>
+  <nav class="top-nav">
+    <a href="index.html" class="active">Overview</a>
+    <a href="voltages.html">Why Voltages Are So High</a>
+  </nav>
 </div>
 
 <div class="shell">

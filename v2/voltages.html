@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Why grid voltages are so high</title>
+<style>
+:root {
+  --c-400: #ff6b6b;
+  --c-132: #4dabf7;
+  --c-33:  #20c997;
+  --c-11:  #82c91e;
+  --c-lv:  #adb5bd;
+  --gold:  #ffd43b;
+  --bg:    #0f1419;
+  --panel: #1a1f26;
+  --border:#2a323d;
+  --text:  #e8ecef;
+  --muted: #8c97a3;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+.top-bar {
+  padding: 0 16px; background: #fff; border-bottom: 1px solid #e0e0e0;
+  display: flex; align-items: center; gap: 16px; height: 44px;
+}
+.top-bar h1 { font-size: 18px; font-weight: 600; white-space: nowrap; color: #1a1a1a; margin-right: 8px; }
+.top-nav { display: flex; gap: 2px; height: 100%; }
+.top-nav a {
+  display: flex; align-items: center; padding: 0 14px; font-size: 13px;
+  color: #666; text-decoration: none; border-bottom: 2px solid transparent;
+  transition: all 0.12s; white-space: nowrap;
+}
+.top-nav a:hover { color: #1a1a1a; background: #f5f5f5; }
+.top-nav a.active { color: #185FA5; border-bottom-color: #185FA5; font-weight: 500; }
+.container { max-width: 1180px; margin: 0 auto; padding: 24px 20px 60px; }
+h1 { font-size: 30px; margin: 0 0 6px; font-weight: 700; letter-spacing: -0.01em; }
+.lead {
+  color: var(--muted);
+  font-size: 15px;
+  margin: 0 0 28px;
+  max-width: 780px;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 26px 28px;
+  margin-bottom: 22px;
+}
+.panel h2 {
+  font-size: 18px;
+  margin: 0 0 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.panel h2 em { color: var(--gold); font-style: normal; }
+.prose { font-size: 14px; color: var(--text); }
+.prose p { margin: 0 0 10px; }
+.prose strong { color: var(--gold); font-weight: 600; }
+.formula {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background: #0a0d11;
+  padding: 13px 18px;
+  border-radius: 8px;
+  color: var(--gold);
+  font-size: 14px;
+  margin: 12px 0 16px;
+  border-left: 3px solid var(--gold);
+}
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 18px;
+}
+@media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+
+/* Wire demo */
+.wire-demo {
+  position: relative;
+  height: 130px;
+  background: radial-gradient(ellipse at center, #14191f 0%, #0a0d11 100%);
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.wire-label {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  background: rgba(0,0,0,0.4);
+  border-radius: 10px;
+  color: var(--c-400);
+  letter-spacing: 0.02em;
+}
+.wire-lo .wire-label { color: var(--c-lv); }
+.wire-line {
+  position: absolute;
+  left: 50px;
+  right: 50px;
+  height: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, #4a5563, #6b7784, #4a5563);
+  border-radius: 2px;
+}
+.heat-layer {
+  position: absolute;
+  left: 50px;
+  right: 50px;
+  height: 60px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: radial-gradient(ellipse at center, rgba(255, 60, 0, var(--heat, 0)) 0%, transparent 72%);
+  filter: blur(10px);
+  pointer-events: none;
+  transition: none;
+}
+.endpoint {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #000;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  z-index: 2;
+}
+.endpoint.src { left: 6px; background: var(--c-400); }
+.endpoint.dst { right: 6px; background: var(--c-lv); }
+.wire-lo .endpoint.src { background: var(--c-11); }
+.particle {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
+  background: var(--gold);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--gold), 0 0 4px #fff;
+  pointer-events: none;
+  z-index: 1;
+}
+.wire-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 10px 8px 0;
+}
+.wire-stats b { color: var(--text); font-weight: 600; font-family: ui-monospace, monospace; }
+.wire-stats .bad b { color: #ff8a65; }
+.wire-stats .good b { color: var(--c-11); }
+
+.slider-box {
+  margin-top: 22px;
+  padding: 14px 16px;
+  background: #0a0d11;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.slider-box label {
+  min-width: 96px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.slider-box input[type=range] {
+  flex: 1;
+  accent-color: var(--c-132);
+}
+.slider-box .val {
+  min-width: 80px;
+  text-align: right;
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  color: var(--gold);
+  font-size: 14px;
+}
+
+/* Fan-out */
+.fanout-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 6px;
+}
+.fanout-svg {
+  width: 100%;
+  min-width: 800px;
+  height: auto;
+  display: block;
+}
+.fanout-svg .tier-label-l {
+  fill: var(--muted);
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+}
+.fanout-svg .tier-label-r {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.packet { filter: drop-shadow(0 0 4px var(--gold)); }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+.stat {
+  background: #0a0d11;
+  padding: 14px 12px;
+  border-radius: 8px;
+  text-align: center;
+  border: 1px solid var(--border);
+}
+.stat .n {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--gold);
+  font-family: ui-monospace, monospace;
+  letter-spacing: -0.02em;
+}
+.stat .l {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+  letter-spacing: 0.02em;
+}
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 14px;
+  font-style: italic;
+}
+.warning {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  background: rgba(255, 107, 107, 0.12);
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  border-radius: 10px;
+  color: #ff8a65;
+  font-size: 11px;
+  font-weight: 600;
+}
+</style>
+</head>
+<body>
+<div class="top-bar">
+  <h1>UK electricity network</h1>
+  <nav class="top-nav">
+    <a href="index.html">Overview</a>
+    <a href="voltages.html" class="active">Why Voltages Are So High</a>
+  </nav>
+</div>
+<div class="container">
+  <h1>Why grid voltages are so high</h1>
+  <p class="lead">A 1 GW transmission line carries about the same power as 100,000 UK homes at once. Do that at domestic voltage and you'd need a copper cable the thickness of a tree trunk — and you'd still lose most of the energy as heat before it arrived. So transmission goes high, and distribution fans it out.</p>
+
+  <!-- Physics panel -->
+  <div class="panel">
+    <h2>The physics: losses scale with <em>current squared</em></h2>
+    <div class="prose">
+      <p>Moving power <strong>P</strong> through a wire of resistance <strong>R</strong> dissipates heat:</p>
+      <div class="formula">P_loss = I² × R &nbsp;&nbsp;where&nbsp;&nbsp; I = P / (√3 × V)  &nbsp;(three-phase)</div>
+      <p>So for a fixed power, <strong>doubling voltage halves the current</strong> — and <em style="color:var(--gold);font-style:normal">quarters</em> the losses. 400 kV is ~36× higher than 11 kV, so losses are ~1300× lower. That's why GB transmission loses only ~1.7 % over hundreds of km, and why you'd never distribute at the generator's own 20 kV.</p>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <div class="wire-demo wire-hi" id="wire-hi">
+          <div class="wire-label">TRANSMISSION · 400 kV · 100 km</div>
+          <div class="heat-layer" id="heat-hi"></div>
+          <div class="wire-line"></div>
+          <div class="endpoint src">GEN</div>
+          <div class="endpoint dst">LOAD</div>
+        </div>
+        <div class="wire-stats">
+          <span>Current: <b id="i-hi">—</b></span>
+          <span class="good">Loss: <b id="loss-hi">—</b></span>
+        </div>
+      </div>
+      <div>
+        <div class="wire-demo wire-lo" id="wire-lo">
+          <div class="wire-label">SAME POWER at 11 kV · 100 km</div>
+          <div class="heat-layer" id="heat-lo"></div>
+          <div class="wire-line"></div>
+          <div class="endpoint src">GEN</div>
+          <div class="endpoint dst">LOAD</div>
+        </div>
+        <div class="wire-stats">
+          <span>Current: <b id="i-lo">—</b></span>
+          <span class="bad">Loss: <b id="loss-lo">—</b></span>
+        </div>
+        <div id="impossible-note" style="display:none"><span class="warning">⚠ Physically impossible — loss exceeds power sent</span></div>
+      </div>
+    </div>
+
+    <div class="slider-box">
+      <label>Power carried</label>
+      <input type="range" min="50" max="1500" step="25" value="500" id="p-slider">
+      <span class="val" id="p-val">500 MW</span>
+    </div>
+    <p class="hint">Drag the slider. Both wires use the same conductor resistance (0.03 Ω/km per phase) — the only variable is voltage. Watch how 11 kV heats up catastrophically at any meaningful power level.</p>
+  </div>
+
+  <!-- Fan-out panel -->
+  <div class="panel">
+    <h2>The fan-out: high voltage splits into <em>many</em> low-voltage paths</h2>
+    <div class="prose">
+      <p>One 1 GW generator feeds millions of customers. The network branches at every voltage step — transmission (400 kV) fans into primary distribution (132 → 33 → 11 kV) which fans into secondary (400 V) which finally reaches the socket. Each tier trades <strong>voltage</strong> for <strong>branch count</strong>, because safety and insulation cost rise with voltage while branching cost falls. The orange pulses are power flowing outward.</p>
+    </div>
+
+    <div class="fanout-wrap">
+      <svg class="fanout-svg" viewBox="0 0 1200 520" id="fanout"
+           xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat"><div class="n">1</div><div class="l">Generator (~1 GW)</div></div>
+      <div class="stat"><div class="n">~330</div><div class="l">GSPs nationally (GB)</div></div>
+      <div class="stat"><div class="n">~1,500</div><div class="l">BSPs</div></div>
+      <div class="stat"><div class="n">~7,000</div><div class="l">Primary substations</div></div>
+      <div class="stat"><div class="n">~500k</div><div class="l">Distribution subs</div></div>
+      <div class="stat"><div class="n">~30 M</div><div class="l">Customer connections</div></div>
+    </div>
+    <p class="hint">Branch ratios are illustrative — real GB numbers vary by DNO and density. The geometric progression (roughly ×3 per tier here) is schematic to fit the view.</p>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Physics panel
+// ============================================================
+const R_PER_KM = 0.03;   // Ω/km per phase (typical large HV conductor)
+const LEN_KM   = 100;
+const SQRT3    = Math.sqrt(3);
+
+function formatCurrent(a) {
+  if (a >= 1000) return (a/1000).toFixed(1) + ' kA';
+  return a.toFixed(0) + ' A';
+}
+function formatPowerW(w) {
+  if (w >= 1e9) return (w/1e9).toFixed(2) + ' GW';
+  if (w >= 1e6) return (w/1e6).toFixed(1) + ' MW';
+  if (w >= 1e3) return (w/1e3).toFixed(1) + ' kW';
+  return w.toFixed(0) + ' W';
+}
+
+function updatePhysics() {
+  const P_MW = +document.getElementById('p-slider').value;
+  const P = P_MW * 1e6;
+  document.getElementById('p-val').textContent = P_MW + ' MW';
+
+  const V_hi = 400e3, V_lo = 11e3;
+  const I_hi = P / (SQRT3 * V_hi);
+  const I_lo = P / (SQRT3 * V_lo);
+  const loss_hi = 3 * I_hi * I_hi * R_PER_KM * LEN_KM;  // three phases
+  const loss_lo = 3 * I_lo * I_lo * R_PER_KM * LEN_KM;
+
+  document.getElementById('i-hi').textContent = formatCurrent(I_hi);
+  document.getElementById('i-lo').textContent = formatCurrent(I_lo);
+
+  const pctHi = 100 * loss_hi / P;
+  const pctLo = 100 * loss_lo / P;
+  document.getElementById('loss-hi').textContent = formatPowerW(loss_hi) + '  (' + pctHi.toFixed(2) + '%)';
+  document.getElementById('loss-lo').textContent = formatPowerW(loss_lo) + '  (' + pctLo.toFixed(0) + '%)';
+
+  document.getElementById('impossible-note').style.display = (pctLo > 100) ? 'block' : 'none';
+
+  // heat glow intensity
+  document.getElementById('heat-hi').style.setProperty('--heat', Math.min(1, pctHi / 2));
+  document.getElementById('heat-lo').style.setProperty('--heat', Math.min(1, pctLo / 15));
+
+  // adjust particle spawn rates on the wires
+  hiRate = Math.max(1, Math.min(8, P_MW / 100));      // transmission: modest particle count
+  loRate = Math.max(6, Math.min(40, P_MW / 10));      // distribution: many more
+}
+
+let hiRate = 3, loRate = 18;
+document.getElementById('p-slider').addEventListener('input', updatePhysics);
+updatePhysics();
+
+// Particle flow on the wire demos
+function spawnOn(wireId, rateGetter, colorClass) {
+  const wire = document.getElementById(wireId);
+  function tick() {
+    const interval = 1000 / rateGetter();
+    setTimeout(tick, interval);
+    const p = document.createElement('div');
+    p.className = 'particle';
+    wire.appendChild(p);
+    const rect = wire.getBoundingClientRect();
+    if (!rect.width) { p.remove(); return; }
+    const distance = rect.width - 100;
+    const duration = 2400;
+    p.style.left = '50px';
+    const anim = p.animate([
+      { transform: 'translateX(0px)',  opacity: 0.2 },
+      { transform: 'translateX(20px)', opacity: 1, offset: 0.08 },
+      { transform: 'translateX(' + (distance - 20) + 'px)', opacity: 1, offset: 0.92 },
+      { transform: 'translateX(' + distance + 'px)', opacity: 0.2 }
+    ], { duration, easing: 'linear' });
+    anim.onfinish = () => p.remove();
+  }
+  tick();
+}
+spawnOn('wire-hi', () => hiRate);
+spawnOn('wire-lo', () => loRate);
+
+// ============================================================
+// Fan-out SVG tree
+// ============================================================
+const svg = document.getElementById('fanout');
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const W = 1200, H = 520;
+
+const tiers = [
+  { key: 'gen',  y: 40,  nodes: 1,   color: '#ff6b6b', r: 14, strokeW: 3.5,
+    labelL: '400 kV', labelR: '1 GW generator' },
+  { key: 'tx',   y: 120, nodes: 3,   color: '#ff6b6b', r: 10, strokeW: 2.5,
+    labelL: '400 kV', labelR: 'Transmission (NGET/SPT/SSEN-T)' },
+  { key: 'gsp',  y: 200, nodes: 9,   color: '#4dabf7', r: 8,  strokeW: 1.8,
+    labelL: '132 kV', labelR: 'GSPs — TO/DNO boundary' },
+  { key: 'bsp',  y: 280, nodes: 27,  color: '#20c997', r: 6,  strokeW: 1.2,
+    labelL: '33 kV',  labelR: 'BSPs (132 → 33 kV)' },
+  { key: 'pri',  y: 360, nodes: 81,  color: '#82c91e', r: 4,  strokeW: 0.8,
+    labelL: '11 kV',  labelR: 'Primary subs (33 → 11 kV)' },
+  { key: 'dist', y: 440, nodes: 243, color: '#adb5bd', r: 2,  strokeW: 0.4,
+    labelL: '400 V',  labelR: 'Distribution subs → homes/sockets' }
+];
+
+// layout
+tiers.forEach(t => {
+  const pad = 80;
+  const usable = W - 2 * pad;
+  t.xs = [];
+  for (let i = 0; i < t.nodes; i++) {
+    t.xs.push(pad + (t.nodes === 1 ? usable / 2 : usable * i / (t.nodes - 1)));
+  }
+});
+
+// draw edges
+const edgesGroup = document.createElementNS(SVG_NS, 'g');
+for (let i = 1; i < tiers.length; i++) {
+  const parent = tiers[i-1], child = tiers[i];
+  const branch = child.nodes / parent.nodes;
+  for (let j = 0; j < child.nodes; j++) {
+    const pIdx = Math.floor(j / branch);
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', parent.xs[pIdx]);
+    line.setAttribute('y1', parent.y);
+    line.setAttribute('x2', child.xs[j]);
+    line.setAttribute('y2', child.y);
+    line.setAttribute('stroke', child.color);
+    line.setAttribute('stroke-width', child.strokeW);
+    line.setAttribute('opacity', 0.32);
+    line.setAttribute('stroke-linecap', 'round');
+    edgesGroup.appendChild(line);
+  }
+}
+svg.appendChild(edgesGroup);
+
+// draw nodes
+const nodesGroup = document.createElementNS(SVG_NS, 'g');
+tiers.forEach(t => {
+  t.xs.forEach(x => {
+    const c = document.createElementNS(SVG_NS, 'circle');
+    c.setAttribute('cx', x);
+    c.setAttribute('cy', t.y);
+    c.setAttribute('r', t.r);
+    c.setAttribute('fill', t.color);
+    c.setAttribute('stroke', '#000');
+    c.setAttribute('stroke-width', 0.5);
+    nodesGroup.appendChild(c);
+  });
+});
+svg.appendChild(nodesGroup);
+
+// tier labels
+tiers.forEach(t => {
+  const left = document.createElementNS(SVG_NS, 'text');
+  left.setAttribute('x', 8);
+  left.setAttribute('y', t.y + 4);
+  left.setAttribute('class', 'tier-label-l');
+  left.textContent = t.labelL;
+  svg.appendChild(left);
+
+  const right = document.createElementNS(SVG_NS, 'text');
+  right.setAttribute('x', W - 8);
+  right.setAttribute('y', t.y + 4);
+  right.setAttribute('text-anchor', 'end');
+  right.setAttribute('class', 'tier-label-r');
+  right.textContent = t.labelR;
+  svg.appendChild(right);
+});
+
+// packet animation layer (drawn on top)
+const packetLayer = document.createElementNS(SVG_NS, 'g');
+svg.appendChild(packetLayer);
+
+function animatePacket() {
+  const packet = document.createElementNS(SVG_NS, 'circle');
+  packet.setAttribute('r', 3.2);
+  packet.setAttribute('fill', '#ffd43b');
+  packet.setAttribute('class', 'packet');
+  packetLayer.appendChild(packet);
+
+  // choose a random path down the tree
+  const path = [0];
+  for (let i = 1; i < tiers.length; i++) {
+    const branch = tiers[i].nodes / tiers[i-1].nodes;
+    const childBase = path[i-1] * branch;
+    path.push(Math.floor(childBase + Math.random() * branch));
+  }
+
+  const segDur = 340;  // ms per tier-to-tier segment
+  let seg = 0;
+  packet.setAttribute('cx', tiers[0].xs[0]);
+  packet.setAttribute('cy', tiers[0].y);
+
+  function step() {
+    if (seg >= tiers.length - 1) {
+      // fade out at customer
+      packet.animate([{opacity:1},{opacity:0}], {duration: 200, fill: 'forwards'});
+      setTimeout(() => packet.remove(), 220);
+      return;
+    }
+    const p = tiers[seg], c = tiers[seg+1];
+    const x1 = p.xs[path[seg]],   y1 = p.y;
+    const x2 = c.xs[path[seg+1]], y2 = c.y;
+    const t0 = performance.now();
+    function frame(now) {
+      const t = Math.min(1, (now - t0) / segDur);
+      // slight ease-in-out
+      const e = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2;
+      packet.setAttribute('cx', x1 + (x2 - x1) * e);
+      packet.setAttribute('cy', y1 + (y2 - y1) * e);
+      if (t < 1) requestAnimationFrame(frame);
+      else { seg++; step(); }
+    }
+    requestAnimationFrame(frame);
+  }
+  step();
+}
+
+// spawn packets at steady cadence from the generator
+setInterval(animatePacket, 140);
+// initial burst so the tree fills in immediately
+for (let i = 0; i < 10; i++) setTimeout(animatePacket, i * 60);
+</script>
+</body>
+</html>
