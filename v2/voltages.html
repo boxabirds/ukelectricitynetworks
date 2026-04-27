@@ -327,7 +327,7 @@ h1 { font-size: 30px; margin: 0 0 6px; font-weight: 700; letter-spacing: -0.01em
   <div class="panel">
     <h2>The fan-out: high voltage splits into <em>many</em> low-voltage paths</h2>
     <div class="prose">
-      <p>One 1 GW generator feeds millions of customers. The network branches at every voltage step — transmission (400 kV) fans into primary distribution (132 → 33 → 11 kV) which fans into secondary (400 V) which finally reaches the socket. Each tier trades <strong>voltage</strong> for <strong>branch count</strong>, because safety and insulation cost rise with voltage while branching cost falls. The orange pulses are power flowing outward.</p>
+      <p>One 1 GW generator feeds millions of customers. The network branches at every voltage step — transmission (400/275/132 kV) fans into primary distribution (typically 132 → 33 → 11 kV, though voltages vary by area — some secondaries run at 6.6 kV) which fans into low voltage (400 V) which finally reaches the socket. Each tier trades <strong>voltage</strong> for <strong>branch count</strong>, because safety and insulation cost rise with voltage while branching cost falls. The orange pulses are power flowing outward.</p>
     </div>
 
     <div class="fanout-wrap">
@@ -438,13 +438,13 @@ const tiers = [
   { key: 'gen',  y: 40,  nodes: 1,   color: '#ff6b6b', r: 14, strokeW: 3.5,
     labelL: '400 kV', labelR: '1 GW generator' },
   { key: 'tx',   y: 120, nodes: 3,   color: '#ff6b6b', r: 10, strokeW: 2.5,
-    labelL: '400 kV', labelR: 'Transmission (NGET/SPT/SSEN-T)' },
+    labelL: '400/275/132 kV', labelR: 'Transmission (NGET/SPT/SSEN-T)' },
   { key: 'gsp',  y: 200, nodes: 9,   color: '#4dabf7', r: 8,  strokeW: 1.8,
     labelL: '132 kV', labelR: 'GSPs — TO/DNO boundary' },
   { key: 'bsp',  y: 280, nodes: 27,  color: '#20c997', r: 6,  strokeW: 1.2,
-    labelL: '33 kV',  labelR: 'BSPs (132 → 33 kV)' },
+    labelL: '~33 kV', labelR: 'BSPs (132 → typically 33 kV)' },
   { key: 'pri',  y: 360, nodes: 81,  color: '#82c91e', r: 4,  strokeW: 0.8,
-    labelL: '11 kV',  labelR: 'Primary subs (33 → 11 kV)' },
+    labelL: '~11 kV', labelR: 'Primary subs (33 → typically 11 kV, sometimes 6.6 kV)' },
   { key: 'dist', y: 440, nodes: 243, color: '#adb5bd', r: 2,  strokeW: 0.4,
     labelL: '400 V',  labelR: 'Distribution subs → homes/sockets' }
 ];
